@@ -41,7 +41,6 @@ pub mod charset;
 pub mod keyspace;
 pub mod mask;
 
-#[cfg(feature = "gpu")]
 pub mod gpu;
 
 pub mod bindings;

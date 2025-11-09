@@ -18,6 +18,10 @@ path = "src/lib.rs"
 name = "gpu-scatter-gather"
 path = "src/main.rs"
 
+[[bin]]
+name = "baseline_benchmark"
+path = "benches/scientific/baseline_benchmark.rs"
+
 [dependencies]
 # CUDA runtime bindings
 cuda-driver-sys = "0.3"
@@ -32,6 +36,8 @@ env_logger = "0.11"
 # Serialization for benchmark results
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+# Time/date handling for benchmarks
+chrono = "0.4"
 # Async runtime (for future bindings)
 tokio = { version = "1.40", features = ["full"], optional = true }
 

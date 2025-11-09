@@ -1,0 +1,79 @@
+{
+  "small_4char_lowercase": {
+    "pattern_name": "small_4char_lowercase",
+    "num_runs": 10,
+    "mean_throughput": 749471567.8624094,
+    "median_throughput": 750238931.4040259,
+    "std_dev": 10430480.24866829,
+    "coefficient_of_variation": 0.013917112664350138,
+    "confidence_interval_95": [
+      742122716.0247767,
+      756820419.700042
+    ],
+    "min_throughput": 732521189.3274966,
+    "max_throughput": 760693521.3939766,
+    "outliers": []
+  },
+  "special_chars": {
+    "pattern_name": "special_chars",
+    "num_runs": 10,
+    "mean_throughput": 756293075.4539529,
+    "median_throughput": 757295065.1508578,
+    "std_dev": 6392488.167637422,
+    "coefficient_of_variation": 0.008452395473541038,
+    "confidence_interval_95": [
+      751789212.9952915,
+      760796937.9126143
+    ],
+    "min_throughput": 738583036.8455838,
+    "max_throughput": 762111265.1684802,
+    "outliers": [
+      738583036.8455838
+    ]
+  },
+  "large_8char_lowercase_limited": {
+    "pattern_name": "large_8char_lowercase_limited",
+    "num_runs": 10,
+    "mean_throughput": 572220803.8622025,
+    "median_throughput": 571701264.8010681,
+    "std_dev": 8633335.206501551,
+    "coefficient_of_variation": 0.015087419311270897,
+    "confidence_interval_95": [
+      566138140.3812667,
+      578303467.3431383
+    ],
+    "min_throughput": 557450280.1235292,
+    "max_throughput": 583049542.6989841,
+    "outliers": []
+  },
+  "medium_6char_lowercase": {
+    "pattern_name": "medium_6char_lowercase",
+    "num_runs": 10,
+    "mean_throughput": 756599618.5593789,
+    "median_throughput": 759749168.7538242,
+    "std_dev": 8830966.787143223,
+    "coefficient_of_variation": 0.011671915462973708,
+    "confidence_interval_95": [
+      750377712.6687027,
+      762821524.450055
+    ],
+    "min_throughput": 742991139.4197983,
+    "max_throughput": 767363564.4820867,
+    "outliers": []
+  },
+  "mixed_upper_lower_digits": {
+    "pattern_name": "mixed_upper_lower_digits",
+    "num_runs": 10,
+    "mean_throughput": 579927686.280871,
+    "median_throughput": 579690468.2882586,
+    "std_dev": 3741124.095906166,
+    "coefficient_of_variation": 0.006451018263843092,
+    "confidence_interval_95": [
+      577291856.8625159,
+      582563515.6992261
+    ],
+    "min_throughput": 573893537.1958227,
+    "max_throughput": 588047928.2371937,
+    "outliers": []
+  }
+}

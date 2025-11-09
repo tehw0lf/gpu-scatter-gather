@@ -1027,9 +1027,9 @@ __global__ void generate_words_kernel(
 - [ ] Graceful handling of edge cases and errors
 - [ ] Stable performance over extended runtime
 
-## Phase 2.6: Formal Validation & Scientific Rigor (October 16, 2025)
+## Phase 2.6: Formal Validation & Scientific Rigor (October 16 - November 9, 2025)
 
-**Status:** ✅ **FORMAL SPECIFICATION COMPLETE**
+**Status:** ✅ **COMPLETE** (Formal Specification + Baseline Benchmarking)
 
 ### Mathematical Foundations
 
@@ -1064,12 +1064,13 @@ __global__ void generate_words_kernel(
   - [ ] Implement runs test for sequence randomness
   - [ ] Document results in `docs/STATISTICAL_VALIDATION.md`
 
-- [ ] **Scientific Benchmarking Framework**
-  - [ ] Standardized methodology with multiple runs
-  - [ ] Statistical analysis: mean, median, std dev, confidence intervals
-  - [ ] Outlier detection and handling
-  - [ ] Warm-up runs to exclude cold-start effects
-  - [ ] Publish raw data and scripts for reproducibility
+- [x] **Scientific Benchmarking Framework** (COMPLETE - November 9, 2025)
+  - [x] Standardized methodology with multiple runs
+  - [x] Statistical analysis: mean, median, std dev, confidence intervals
+  - [x] Outlier detection and handling
+  - [x] Warm-up runs to exclude cold-start effects
+  - [x] Publish raw data and scripts for reproducibility
+  - [x] Baseline results: 572-757M words/s on RTX 4070 Ti SUPER (all patterns CV < 5%)
 
 - [ ] **Formal Verification (Optional - Ambitious)**
   - [ ] Formalize proofs in Coq or Lean 4 (machine-verified)
@@ -1086,8 +1087,11 @@ __global__ void generate_words_kernel(
 
 - [x] `docs/FORMAL_SPECIFICATION.md` - Complete mathematical specification with proofs
 - [x] `docs/FORMAL_VALIDATION_PLAN.md` - Comprehensive plan for academic rigor
-- [ ] `docs/STATISTICAL_VALIDATION.md` - Statistical test results
-- [ ] `docs/SCIENTIFIC_BENCHMARKS.md` - Rigorous benchmarking methodology
+- [x] `docs/BASELINE_BENCHMARKING_PLAN.md` - Baseline benchmarking methodology (COMPLETE)
+- [x] `benches/scientific/README.md` - Benchmarking usage guide (COMPLETE)
+- [x] `benches/scientific/results/baseline_2025-11-09.json` - Baseline data (COMPLETE)
+- [x] `benches/scientific/results/baseline_report_2025-11-09.md` - Baseline report (COMPLETE)
+- [ ] `docs/STATISTICAL_VALIDATION.md` - Statistical test results (Optional)
 - [ ] `paper/` - Optional academic paper directory
 
 ### Key Achievements

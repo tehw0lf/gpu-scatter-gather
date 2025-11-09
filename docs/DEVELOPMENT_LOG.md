@@ -604,6 +604,119 @@ test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out
 
 ---
 
+## Phase 2.6: Scientific Baseline Benchmarking (November 9, 2025)
+
+**Status:** ✅ **COMPLETE**
+
+### Objectives
+- Establish scientifically rigorous performance baseline before Phase 3 optimizations
+- Implement automated benchmarking suite with statistical analysis
+- Create reproducible measurement methodology
+- Enable objective comparison of future optimizations
+
+### Implementation
+
+**Baseline Benchmark Suite Created:**
+- `benches/scientific/statistical_analysis.rs`: Statistical utilities module
+  - Comprehensive metrics: mean, median, std dev, CV, 95% CI
+  - Outlier detection using IQR method
+  - Stability checking (CV < 5% threshold)
+  - Unit tests covering all statistical functions
+
+- `benches/scientific/baseline_benchmark.rs`: Main benchmark binary
+  - 5 standard test patterns (small, medium, large, mixed, special chars)
+  - 3 warm-up runs + 10 measurement runs per pattern
+  - CUDA event timing for accurate GPU measurements
+  - JSON and markdown report generation
+
+**Automation Infrastructure:**
+- `scripts/run_baseline_benchmark.sh`: Automated benchmark runner
+  - Sets CPU governor to performance mode
+  - Locks GPU clocks to prevent throttling/boosting
+  - Runs complete benchmark suite
+  - Restores system settings after completion
+
+- `scripts/compare_benchmarks.sh`: Comparison tool
+  - Compares two benchmark result files
+  - Calculates improvement percentages
+  - Highlights regressions vs improvements
+
+**Documentation:**
+- `benches/scientific/README.md`: Complete usage guide
+- `docs/BASELINE_BENCHMARKING_PLAN.md`: Implementation methodology
+
+### Baseline Results (RTX 4070 Ti SUPER, Compute Capability 8.9)
+
+All patterns achieved **stable performance (CV < 5%)**:
+
+| Pattern | Mean Throughput | Std Dev | CV | Status |
+|---------|----------------|---------|-----|--------|
+| small_4char_lowercase | 749.47M words/s | 10.43M | 1.39% | ✅ STABLE |
+| medium_6char_lowercase | 756.60M words/s | 8.83M | 1.17% | ✅ STABLE |
+| large_8char_lowercase (1B) | 572.22M words/s | 8.63M | 1.51% | ✅ STABLE |
+| mixed_upper_lower_digits | 579.93M words/s | 3.74M | 0.65% | ✅ STABLE |
+| special_chars | 756.29M words/s | 6.39M | 0.85% | ✅ STABLE |
+
+**Performance Range:** 572-757M words/s depending on pattern complexity
+
+**vs Informal Measurements:**
+- Previous informal claims: 635M-1.2B words/s (single runs)
+- New scientific baseline: 572-757M words/s (10-run average with CI)
+- More conservative but **statistically rigorous and reproducible**
+
+### Key Achievements
+
+1. ✅ **Scientific Rigor Established**
+   - Multiple runs with statistical analysis (not single measurements)
+   - Confidence intervals for all metrics
+   - Outlier detection and stability verification
+   - Reproducible methodology documented
+
+2. ✅ **Automated Infrastructure**
+   - One-command benchmark execution
+   - Automated result comparison
+   - JSON storage for historical tracking
+   - Markdown reports for human readability
+
+3. ✅ **Objective Measurement Capability**
+   - Can now measure optimization impact scientifically
+   - Detect performance regressions automatically
+   - Compare different GPU architectures objectively
+
+4. ✅ **Foundation for Phase 3**
+   - Baseline established before any optimizations
+   - Can prove whether optimizations actually improve performance
+   - Industry-standard benchmarking practices implemented
+
+### Files Added
+
+- `benches/scientific/statistical_analysis.rs` (279 lines)
+- `benches/scientific/baseline_benchmark.rs` (387 lines)
+- `benches/scientific/README.md` (195 lines)
+- `benches/scientific/results/baseline_2025-11-09.json`
+- `benches/scientific/results/baseline_report_2025-11-09.md`
+- `scripts/run_baseline_benchmark.sh`
+- `scripts/compare_benchmarks.sh`
+- `docs/BASELINE_BENCHMARKING_PLAN.md` (1059 lines)
+
+### Next: Phase 3 Optimizations
+
+With baseline established, we can now:
+1. Implement Barrett reduction for faster modulo
+2. Optimize memory coalescing patterns
+3. Add multi-GPU support
+4. **Measure impact objectively** using comparison tools
+
+Each optimization can be validated with:
+```bash
+./scripts/run_baseline_benchmark.sh
+./scripts/compare_benchmarks.sh \
+    benches/scientific/results/baseline_2025-11-09.json \
+    benches/scientific/results/optimized_YYYY-MM-DD.json
+```
+
+---
+
 ## Next Steps
 
 ### Phase 3: Bindings & Integration
@@ -639,7 +752,7 @@ test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** October 16, 2025
+**Document Version:** 2.0
+**Last Updated:** November 9, 2025
 **Author:** tehw0lf + Claude Code (AI-assisted development)
-**Status:** Phase 2 Complete - Research needed before Phase 3
+**Status:** Phase 2.6 Complete - Ready for Phase 3 Optimizations

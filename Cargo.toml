@@ -22,6 +22,10 @@ path = "src/main.rs"
 name = "baseline_benchmark"
 path = "benches/scientific/baseline_benchmark.rs"
 
+[[bin]]
+name = "validation_suite"
+path = "benches/scientific/validation_suite.rs"
+
 [dependencies]
 # CUDA runtime bindings
 cuda-driver-sys = "0.3"

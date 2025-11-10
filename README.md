@@ -294,6 +294,18 @@ Unauthorized access to systems is illegal. Always obtain proper authorization be
 
 ## Comparison
 
+### Evolution from Author's Prior Work
+
+This project represents the third iteration of wordlist generation by the author:
+
+| Implementation | Language | Algorithm | Performance | Speedup | Repository |
+|----------------|----------|-----------|-------------|---------|------------|
+| **wlgen** | Python | itertools.product + recursive | 210K-1.6M words/s | 1× | [github.com/tehw0lf/wlgen](https://github.com/tehw0lf/wlgen) (PyPI) |
+| **wlgen-rs** | Rust | Odometer (CPU) | ~150M words/s | ~100× | [github.com/tehw0lf/wlgen-rs](https://github.com/tehw0lf/wlgen-rs) |
+| **gpu-scatter-gather** | Rust+CUDA | Mixed-radix direct indexing | 572-757M words/s | **285-3600×** | This project |
+
+**Key insight:** Traditional approaches (Python itertools, Rust odometer) cannot leverage GPU parallelism. The mixed-radix direct indexing algorithm (AI-proposed) enables true GPU acceleration.
+
 ### vs maskprocessor
 
 **Our Advantages:**
@@ -316,6 +328,14 @@ Unauthorized access to systems is illegal. Always obtain proper authorization be
 - Better memory efficiency
 - Modern codebase in Rust
 - GPU-accelerated parallel generation
+
+### vs Author's Previous Work (wlgen Python)
+
+**Our Advantages:**
+- **285-3600× faster** (750M vs 210K-1.6M words/s)
+- GPU acceleration (wlgen investigated CUDA but found no benefit in Python)
+- Novel algorithm designed for parallelization
+- Scales with GPU cores (wlgen is single-threaded CPU-bound)
 
 ### vs hashcat built-in
 
@@ -365,14 +385,52 @@ Unauthorized access to systems is illegal. Always obtain proper authorization be
 
 ## Contributing
 
-This is an AI-assisted development project showcasing human-AI collaboration in high-performance computing.
+### About This Project
 
-Contributions are welcome! Areas where help is needed:
+This is a **human-AI collaborative research project** that serves two purposes:
+
+1. **Technical Innovation:** A novel GPU-accelerated wordlist generation algorithm achieving 4-7× speedup over existing tools
+2. **AI Research Experiment:** Demonstrating AI capability in autonomous algorithm design and implementation
+
+### Algorithm Origin Story
+
+**The core innovation—mixed-radix direct indexing—was autonomously proposed by Claude Code (AI assistant).**
+
+When asked *"What algorithm would you suggest for a GPU-based approach that would outshine existing solutions?"*, the AI independently proposed abandoning the traditional odometer approach and using direct index-to-word mapping via mixed-radix arithmetic. This algorithmic choice enabled:
+
+- O(1) random access (vs sequential iteration)
+- Perfect GPU parallelization (no synchronization needed)
+- 4-7× performance improvement over maskprocessor
+
+### Implementation Approach
+
+**The human developer (tehw0lf) had minimal Rust experience prior to this project.** The entire implementation—Rust codebase, CUDA kernels, build system, and integration—was developed through AI-guided development. The AI taught Rust concepts (Result types, lifetimes, RAII, borrowing) while implementing the algorithm, demonstrating AI's capability to:
+
+- Implement complete systems in languages unfamiliar to the human
+- Teach language best practices through working code
+- Enable rapid skill transfer while maintaining code quality
+
+The entire development—from algorithm design through Rust/CUDA implementation, mathematical proofs, validation, and documentation—represents genuine human-AI pair programming in systems research, where the human provides direction, domain expertise, and validation while the AI provides implementation and formalization.
+
+**Full transparency:** See [docs/DEVELOPMENT_PROCESS.md](docs/DEVELOPMENT_PROCESS.md) for detailed methodology and contribution breakdown.
+
+### Contributing to the Project
+
+Contributions are welcome! This project benefits from both human and AI collaboration.
+
+**Areas where help is needed:**
 - OpenCL backend for AMD/Intel GPUs
 - Metal backend for Apple Silicon
-- Optimizations and algorithm improvements
+- Algorithm optimizations and improvements
 - Testing on different GPU architectures
 - Documentation improvements
+- Multi-GPU coordination strategies
+
+**Development philosophy:**
+- All changes must pass correctness validation (cross-validation with maskprocessor)
+- Performance claims require reproducible benchmarks
+- Code quality maintained through Rust best practices
+- Mathematical claims require formal proofs
 
 See [TODO.md](GPU_SCATTER_GATHER_TODO.md) for detailed implementation plan.
 
@@ -386,11 +444,14 @@ Choose whichever license suits your use case.
 
 ## Acknowledgments
 
-- **maskprocessor** - Inspiration for the problem space
+- **maskprocessor** - Inspiration for the problem space and validation baseline
 - **hashcat** - Motivation for high-performance wordlist generation
 - **NVIDIA CUDA** - Making GPU computing accessible
 - **Rust community** - Excellent tooling and libraries
-- **Claude Code** - AI-assisted development and optimization
+- **Claude Code (Anthropic)** - AI partner in algorithm design, implementation, and validation
+  - Autonomously proposed the mixed-radix direct indexing algorithm
+  - Collaborative development of CUDA kernels and mathematical proofs
+  - See [docs/DEVELOPMENT_PROCESS.md](docs/DEVELOPMENT_PROCESS.md) for full methodology
 
 ## Contact
 

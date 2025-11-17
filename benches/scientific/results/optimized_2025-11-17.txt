@@ -1,0 +1,184 @@
+warning: gpu-scatter-gather@0.1.0: Failed to compile CUDA kernel for sm_70: exit code Some(1)
+warning: gpu-scatter-gather@0.1.0: Compiled CUDA kernel for sm_75
+warning: gpu-scatter-gather@0.1.0: Compiled CUDA kernel for sm_80
+warning: gpu-scatter-gather@0.1.0: Compiled CUDA kernel for sm_86
+warning: gpu-scatter-gather@0.1.0: Compiled CUDA kernel for sm_89
+warning: gpu-scatter-gather@0.1.0: Compiled CUDA kernel for sm_90
+   Compiling gpu-scatter-gather v0.1.0 (/path/to/gpu-scatter-gather)
+warning: field `batch_size` is never read
+   --> src/lib.rs:120:5
+    |
+117 | pub struct WordlistGenerator {
+    |            ----------------- field in this struct
+...
+120 |     batch_size: usize,
+    |     ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `gpu-scatter-gather` (lib) generated 1 warning
+    Finished `release` profile [optimized] target(s) in 5.49s
+     Running `target/release/baseline_benchmark`
+=== GPU Scatter-Gather Baseline Benchmarks ===
+
+
+=== GPU Scatter-Gather Baseline Benchmarks ===
+GPU: NVIDIA GeForce RTX 4070 Ti SUPER
+Compute Capability: 8.9
+
+
+=== Benchmarking: small_4char_lowercase ===
+Mask: ?l?l?l?l
+Keyspace: 456976
+
+Warm-up runs (3x)...
+  Warm-up 1: 306.72M words/s
+  Warm-up 2: 320.57M words/s
+  Warm-up 3: 718.01M words/s
+
+Measurement runs (10x)...
+  Run 1: 734.93M words/s
+  Run 2: 739.62M words/s
+  Run 3: 734.03M words/s
+  Run 4: 736.60M words/s
+  Run 5: 733.31M words/s
+  Run 6: 734.25M words/s
+  Run 7: 676.00M words/s
+  Run 8: 727.30M words/s
+  Run 9: 701.71M words/s
+  Run 10: 703.27M words/s
+
+--- Statistics ---
+Mean:     722.10M words/s
+Median:   733.67M words/s
+Std Dev:  20.05M words/s
+CV:       2.78%
+95% CI:   [707.98M, 736.23M] words/s
+Range:    [676.00M, 739.62M] words/s
+✅ Performance is STABLE (CV < 5%)
+
+=== Benchmarking: medium_6char_lowercase ===
+Mask: ?l?l?l?l?l?l
+Keyspace: 308915776
+
+Warm-up runs (3x)...
+  Warm-up 1: 735.13M words/s
+  Warm-up 2: 737.49M words/s
+  Warm-up 3: 715.08M words/s
+
+Measurement runs (10x)...
+  Run 1: 728.72M words/s
+  Run 2: 746.93M words/s
+  Run 3: 716.47M words/s
+  Run 4: 748.36M words/s
+  Run 5: 718.62M words/s
+  Run 6: 742.36M words/s
+  Run 7: 732.98M words/s
+  Run 8: 743.77M words/s
+  Run 9: 748.25M words/s
+  Run 10: 718.61M words/s
+
+--- Statistics ---
+Mean:     734.51M words/s
+Median:   737.67M words/s
+Std Dev:  12.45M words/s
+CV:       1.69%
+95% CI:   [725.74M, 743.28M] words/s
+Range:    [716.47M, 748.36M] words/s
+✅ Performance is STABLE (CV < 5%)
+
+=== Benchmarking: large_8char_lowercase_limited ===
+Mask: ?l?l?l?l?l?l?l?l
+Keyspace: 208827064576
+Generating: 1000000000 words (limited)
+
+Warm-up runs (3x)...
+  Warm-up 1: 561.67M words/s
+  Warm-up 2: 573.62M words/s
+  Warm-up 3: 565.73M words/s
+
+Measurement runs (10x)...
+  Run 1: 563.80M words/s
+  Run 2: 561.87M words/s
+  Run 3: 560.09M words/s
+  Run 4: 558.85M words/s
+  Run 5: 556.22M words/s
+  Run 6: 562.85M words/s
+  Run 7: 565.97M words/s
+  Run 8: 561.64M words/s
+  Run 9: 562.84M words/s
+  Run 10: 560.58M words/s
+
+--- Statistics ---
+Mean:     561.47M words/s
+Median:   561.76M words/s
+Std Dev:  2.58M words/s
+CV:       0.46%
+95% CI:   [559.65M, 563.29M] words/s
+Range:    [556.22M, 565.97M] words/s
+✅ Performance is STABLE (CV < 5%)
+
+=== Benchmarking: mixed_upper_lower_digits ===
+Mask: ?u?l?d?d?d?d?d?d
+Keyspace: 676000000
+
+Warm-up runs (3x)...
+  Warm-up 1: 563.09M words/s
+  Warm-up 2: 565.54M words/s
+  Warm-up 3: 556.77M words/s
+
+Measurement runs (10x)...
+  Run 1: 558.98M words/s
+  Run 2: 566.21M words/s
+  Run 3: 563.71M words/s
+  Run 4: 564.33M words/s
+  Run 5: 559.03M words/s
+  Run 6: 562.04M words/s
+  Run 7: 566.76M words/s
+  Run 8: 569.62M words/s
+  Run 9: 562.51M words/s
+  Run 10: 560.73M words/s
+
+--- Statistics ---
+Mean:     563.39M words/s
+Median:   563.11M words/s
+Std Dev:  3.27M words/s
+CV:       0.58%
+95% CI:   [561.08M, 565.70M] words/s
+Range:    [558.98M, 569.62M] words/s
+✅ Performance is STABLE (CV < 5%)
+
+=== Benchmarking: special_chars ===
+Mask: ?l?l?s?s?s?s
+Keyspace: 778377624
+
+Warm-up runs (3x)...
+  Warm-up 1: 682.62M words/s
+  Warm-up 2: 728.38M words/s
+  Warm-up 3: 700.93M words/s
+
+Measurement runs (10x)...
+  Run 1: 729.57M words/s
+  Run 2: 717.01M words/s
+  Run 3: 695.17M words/s
+  Run 4: 670.27M words/s
+  Run 5: 679.23M words/s
+  Run 6: 657.31M words/s
+  Run 7: 672.82M words/s
+  Run 8: 680.29M words/s
+  Run 9: 669.32M words/s
+  Run 10: 685.08M words/s
+
+--- Statistics ---
+Mean:     685.61M words/s
+Median:   679.76M words/s
+Std Dev:  21.32M words/s
+CV:       3.11%
+95% CI:   [670.59M, 700.63M] words/s
+Range:    [657.31M, 729.57M] words/s
+✅ Performance is STABLE (CV < 5%)
+
+✅ Results saved to: benches/scientific/results/baseline_2025-11-17.json
+✅ Report saved to: benches/scientific/results/baseline_report_2025-11-17.md
+
+✅ Baseline benchmarking complete!

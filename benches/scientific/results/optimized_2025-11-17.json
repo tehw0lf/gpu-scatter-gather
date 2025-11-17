@@ -1,0 +1,5 @@
+error: no bin target named `run_baseline` in default-run packages
+help: available bin targets:
+    baseline_benchmark
+    gpu-scatter-gather
+    validation_suite

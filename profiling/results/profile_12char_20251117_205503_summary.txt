@@ -1,0 +1,62 @@
+# 12-Character Password Profiling Results (2025-11-17)
+
+## Test Configuration
+- Pattern: ?l?l?l?l?l?l?l?l?d?d?d?d (8 lowercase + 4 digits)
+- Batch size: 100M words
+- GPU: RTX 4070 Ti SUPER (CC 8.9)
+
+## Performance Metrics
+- **Memory Throughput**: 95.01% ⚠️ MEMORY-BOUND!
+- **Compute (SM) Throughput**: 17.91%
+- **Achieved Occupancy**: 96.34%
+- **Theoretical Occupancy**: 100%
+- **SM Busy**: 17.02%
+
+## Key Findings
+
+### 🚨 STILL MEMORY-BOUND (95% memory throughput!)
+Even with 12-character words (more compute per word), the kernel remains 
+heavily memory-bound. This is WORSE than the 4-char case (97% memory).
+
+### Compute Underutilization
+- Only 17.91% compute utilization
+- SMs are 83% idle waiting for memory
+- High occupancy (96%) but low SM utilization
+
+### Profiler Warning
+"All compute pipelines are under-utilized. Either this workload is very small 
+or it doesn't issue enough warps per scheduler."
+
+## Root Cause Analysis
+
+The 95% memory throughput with 12-char words indicates:
+1. **Memory writes are STILL the bottleneck** (not reads - shared memory fixed that)
+2. **Longer words = more bytes to write** (13 bytes vs 5 bytes per word)
+3. **Write coalescing may be poor** - threads writing to non-contiguous addresses
+
+## Next Optimization Priorities
+
+### Priority 1: Improve Write Coalescing
+**Problem**: Each thread writes (word_length + 1) bytes to separate locations
+- 12-char: tid * 13 bytes = potentially unaligned, non-coalesced writes
+
+**Solutions**:
+a) Pad output to 16-byte alignment (13 → 16 bytes per word)
+b) Use shared memory staging + cooperative writes
+c) Restructure output buffer for better coalescing
+
+**Expected gain**: 2-5x (could reduce memory throughput from 95% to 20-40%)
+
+### Priority 2: Barrett Reduction
+Now lower priority since compute is only 18% utilized.
+Only worth pursuing after fixing memory bottleneck.
+
+### Priority 3: Increase Batch Size
+The profiler suggests the workload may be too small.
+Test with 500M-1B word batches to saturate the GPU better.
+
+## Performance Breakdown (100M × 12-char words)
+- **Observed total**: 228ms (no profiling)
+- **Memory throughput**: 95% saturated
+- **Compute throughput**: 18% utilized
+- **Bottleneck**: Memory writes (uncoalesced)

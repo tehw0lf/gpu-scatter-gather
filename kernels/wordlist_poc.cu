@@ -263,3 +263,111 @@ extern "C" __global__ void generate_words_transposed_kernel(
         }
     }
 }
+
+/**
+ * Column-Major Write Kernel - Phase 3 Session 4 Hybrid Architecture
+ *
+ * Memory optimization: Generate words in COLUMN-MAJOR layout for fully coalesced writes.
+ * Output is transposed by CPU using AVX2 SIMD to final row-major format.
+ *
+ * Memory access pattern (KEY INSIGHT):
+ *   Traditional row-major: Thread 0 writes w0[0..12], Thread 1 writes w1[0..12]
+ *                          -> Consecutive threads write 13 bytes apart (uncoalesced!)
+ *
+ *   Column-major:          Thread 0 writes w0_c0, Thread 1 writes w1_c0, Thread 2 writes w2_c0
+ *                          -> Consecutive threads write consecutive addresses (coalesced!)
+ *
+ * Output layout (column-major):
+ *   [w0_c0][w1_c0][w2_c0]...[w31_c0][w32_c0]...[w0_c1][w1_c1]...[w0_newline][w1_newline]...
+ *
+ * Expected improvement:
+ *   - Bytes per sector: 7.69% -> 85-95% (11-12x improvement)
+ *   - Sectors per request: 13 -> 1-2 (6.5-13x reduction)
+ *   - L1 amplification: 13x -> 1.2-1.5x (8-10x reduction)
+ *   - Overall speedup: 2-3x faster (reaching 800-1200 M words/s for 12-char)
+ *
+ * CPU transpose overhead: <20% (AVX2 can process 32 bytes/cycle)
+ */
+extern "C" __global__ void generate_words_columnmajor_kernel(
+    const char* __restrict__ charset_data,
+    const int* __restrict__ charset_offsets,
+    const int* __restrict__ charset_sizes,
+    const int* __restrict__ mask_pattern,
+    unsigned long long start_idx,
+    int word_length,
+    char* __restrict__ output_buffer,
+    unsigned long long batch_size
+) {
+    // Shared memory for charset metadata (same optimization as production kernel)
+    __shared__ int s_charset_sizes[32];
+    __shared__ int s_charset_offsets[32];
+    __shared__ int s_mask_pattern[32];
+    __shared__ char s_charset_data[512];
+    __shared__ int s_num_charsets;
+    __shared__ int s_total_charset_size;
+
+    int tid_local = threadIdx.x;
+
+    // Cooperative loading of charset metadata
+    if (tid_local < word_length) {
+        s_mask_pattern[tid_local] = mask_pattern[tid_local];
+    }
+
+    if (tid_local == 0) {
+        int max_id = 0;
+        for (int i = 0; i < word_length; i++) {
+            if (mask_pattern[i] > max_id) max_id = mask_pattern[i];
+        }
+        s_num_charsets = max_id + 1;
+
+        int total_size = 0;
+        for (int i = 0; i < s_num_charsets; i++) {
+            total_size += charset_sizes[i];
+        }
+        s_total_charset_size = total_size;
+    }
+    __syncthreads();
+
+    if (tid_local < s_num_charsets) {
+        s_charset_sizes[tid_local] = charset_sizes[tid_local];
+        s_charset_offsets[tid_local] = charset_offsets[tid_local];
+    }
+
+    for (int i = tid_local; i < s_total_charset_size && i < 512; i += blockDim.x) {
+        s_charset_data[i] = charset_data[i];
+    }
+    __syncthreads();
+
+    // Calculate global thread ID
+    unsigned long long tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= batch_size) return;
+
+    unsigned long long idx = start_idx + tid;
+
+    // Generate word character by character using shared memory
+    unsigned long long remaining = idx;
+
+    // CRITICAL: Write in COLUMN-MAJOR order for coalesced writes
+    // For position pos, thread tid writes to: output_buffer[pos * batch_size + tid]
+    // This ensures consecutive threads write to consecutive addresses!
+
+    #pragma unroll
+    for (int pos = word_length - 1; pos >= 0; pos--) {
+        int charset_id = s_mask_pattern[pos];
+        int cs_size = s_charset_sizes[charset_id];
+        int cs_offset = s_charset_offsets[charset_id];
+
+        int char_idx = remaining % cs_size;
+        char character = s_charset_data[cs_offset + char_idx];
+
+        // Column-major write: pos * batch_size + tid
+        // Thread 0 writes position 0 of output, thread 1 writes position 1, etc.
+        // All threads writing the same character position are consecutive!
+        output_buffer[pos * batch_size + tid] = character;
+
+        remaining /= cs_size;
+    }
+
+    // Write newline at the end (also column-major)
+    output_buffer[word_length * batch_size + tid] = '\n';
+}

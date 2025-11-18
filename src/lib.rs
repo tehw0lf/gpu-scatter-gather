@@ -40,6 +40,7 @@
 pub mod charset;
 pub mod keyspace;
 pub mod mask;
+pub mod transpose;
 
 pub mod gpu;
 

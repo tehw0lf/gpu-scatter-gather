@@ -144,3 +144,122 @@ extern "C" __global__ void generate_words_kernel(
 
     word[word_length] = '\n';
 }
+
+/**
+ * Transposed Write Kernel - Phase 3 Optimization 2
+ *
+ * Memory optimization: Generate words in TRANSPOSED layout for fully coalesced writes.
+ * Instead of each thread writing its entire word (13 scattered writes),
+ * each WARP writes the same position across 32 words (1 coalesced write).
+ *
+ * Memory access pattern:
+ *   Traditional: Thread 0 writes w0[0..12], Thread 1 writes w1[0..12], etc.
+ *                -> 13 writes/thread, uncoalesced (7.69% efficiency)
+ *
+ *   Transposed:  Warp writes w[0..31][pos=0], then w[0..31][pos=1], etc.
+ *                -> 13 writes/warp, fully coalesced (100% efficiency)
+ *
+ * Expected improvement: 13x reduction in memory transactions (from 416 to 13 per warp)
+ * Target: 5-6 GB/s current -> 65-78 GB/s effective (reaching memory bandwidth limits)
+ */
+extern "C" __global__ void generate_words_transposed_kernel(
+    const char* __restrict__ charset_data,
+    const int* __restrict__ charset_offsets,
+    const int* __restrict__ charset_sizes,
+    const int* __restrict__ mask_pattern,
+    unsigned long long start_idx,
+    int word_length,
+    char* __restrict__ output_buffer,
+    unsigned long long batch_size
+) {
+    // Shared memory for charset metadata (same as before)
+    __shared__ int s_charset_sizes[32];
+    __shared__ int s_charset_offsets[32];
+    __shared__ int s_mask_pattern[32];
+    __shared__ char s_charset_data[512];
+    __shared__ int s_num_charsets;
+    __shared__ int s_total_charset_size;
+
+    // Shared memory for ALL warps in block (256 threads = 8 warps)
+    // Layout optimized to avoid bank conflicts:
+    // [warp_id][char_pos][lane_id] so consecutive lanes access consecutive addresses
+    // Max: 8 warps × 32 chars × 32 lanes = 8192 bytes
+    __shared__ char s_words[8][32][32];  // [warp_id][char_pos][lane_id] - TRANSPOSED for conflict-free!
+
+    int tid_local = threadIdx.x;
+    int warp_id = tid_local / 32;
+    int lane_id = tid_local % 32;
+
+    // Cooperative loading of charset metadata (same as before)
+    if (tid_local < word_length) {
+        s_mask_pattern[tid_local] = mask_pattern[tid_local];
+    }
+
+    if (tid_local == 0) {
+        int max_id = 0;
+        for (int i = 0; i < word_length; i++) {
+            if (mask_pattern[i] > max_id) max_id = mask_pattern[i];
+        }
+        s_num_charsets = max_id + 1;
+
+        int total_size = 0;
+        for (int i = 0; i < s_num_charsets; i++) {
+            total_size += charset_sizes[i];
+        }
+        s_total_charset_size = total_size;
+    }
+    __syncthreads();
+
+    if (tid_local < s_num_charsets) {
+        s_charset_sizes[tid_local] = charset_sizes[tid_local];
+        s_charset_offsets[tid_local] = charset_offsets[tid_local];
+    }
+
+    for (int i = tid_local; i < s_total_charset_size && i < 512; i += blockDim.x) {
+        s_charset_data[i] = charset_data[i];
+    }
+    __syncthreads();
+
+    // Calculate global thread ID and word index
+    unsigned long long tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= batch_size) return;
+
+    unsigned long long idx = start_idx + tid;
+
+    // Phase 1: Generate word in shared memory (row-major layout)
+    // Each thread generates its own word character by character
+    unsigned long long remaining = idx;
+
+    #pragma unroll
+    for (int pos = word_length - 1; pos >= 0; pos--) {
+        int charset_id = s_mask_pattern[pos];
+        int cs_size = s_charset_sizes[charset_id];
+        int cs_offset = s_charset_offsets[charset_id];
+
+        int char_idx = remaining % cs_size;
+        s_words[warp_id][pos][lane_id] = s_charset_data[cs_offset + char_idx];  // Transposed index!
+        remaining /= cs_size;
+    }
+    s_words[warp_id][word_length][lane_id] = '\n';  // Transposed index!
+
+    __syncthreads();  // Ensure all threads in block have generated their words
+
+    // Phase 2: Write to global memory in fully coalesced pattern
+    // Now s_words[warp_id][pos][lane] is stored transposed
+    // When we write position pos, all 32 lanes write their character for that position
+    // This gives perfect 32-byte coalesced writes!
+
+    // Calculate base output address for this warp's 32 words
+    unsigned long long warp_start_tid = (blockIdx.x * blockDim.x + warp_id * 32);
+
+    // Each position is written by all threads in warp cooperatively
+    // For position 0: lane 0 writes word 0's char 0, lane 1 writes word 1's char 0, etc.
+    #pragma unroll
+    for (int pos = 0; pos <= word_length; pos++) {
+        unsigned long long word_tid = warp_start_tid + lane_id;
+        if (word_tid < batch_size) {
+            char* word_ptr = output_buffer + (word_tid * (word_length + 1));
+            word_ptr[pos] = s_words[warp_id][pos][lane_id];  // All 32 threads write same position!
+        }
+    }
+}

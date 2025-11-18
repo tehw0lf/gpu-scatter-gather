@@ -14,6 +14,7 @@ pub struct GpuContext {
     context: CUcontext,
     module: CUmodule,
     kernel: CUfunction,
+    kernel_transposed: CUfunction,
     device: CUdevice,
     compute_capability: (i32, i32),
 }
@@ -64,16 +65,22 @@ impl GpuContext {
             check_cuda(cuModuleLoadData(&mut module, ptx_cstring.as_ptr() as *const _))
                 .context("Failed to load CUDA module")?;
 
-            // Get kernel function
+            // Get kernel functions
             let kernel_name = CString::new("generate_words_kernel")?;
             let mut kernel = ptr::null_mut();
             check_cuda(cuModuleGetFunction(&mut kernel, module, kernel_name.as_ptr()))
                 .context("Failed to get kernel function")?;
 
+            let kernel_transposed_name = CString::new("generate_words_transposed_kernel")?;
+            let mut kernel_transposed = ptr::null_mut();
+            check_cuda(cuModuleGetFunction(&mut kernel_transposed, module, kernel_transposed_name.as_ptr()))
+                .context("Failed to get transposed kernel function")?;
+
             Ok(Self {
                 context,
                 module,
                 kernel,
+                kernel_transposed,
                 device,
                 compute_capability: (compute_capability_major, compute_capability_minor),
             })
@@ -102,13 +109,36 @@ impl GpuContext {
         self.compute_capability
     }
 
-    /// Generate words using GPU
+    /// Generate words using GPU (original uncoalesced kernel)
     pub fn generate_batch(
         &self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
         batch_size: u64,
+    ) -> Result<Vec<u8>> {
+        self.generate_batch_internal(charsets, mask, start_idx, batch_size, false)
+    }
+
+    /// Generate words using GPU with transposed writes (fully coalesced)
+    pub fn generate_batch_transposed(
+        &self,
+        charsets: &HashMap<usize, Vec<u8>>,
+        mask: &[usize],
+        start_idx: u64,
+        batch_size: u64,
+    ) -> Result<Vec<u8>> {
+        self.generate_batch_internal(charsets, mask, start_idx, batch_size, true)
+    }
+
+    /// Internal implementation for word generation
+    fn generate_batch_internal(
+        &self,
+        charsets: &HashMap<usize, Vec<u8>>,
+        mask: &[usize],
+        start_idx: u64,
+        batch_size: u64,
+        use_transposed: bool,
     ) -> Result<Vec<u8>> {
         unsafe {
             // Prepare charset data
@@ -192,8 +222,14 @@ impl GpuContext {
                 &batch_size as *const _ as *mut _,
             ];
 
+            let kernel_to_use = if use_transposed {
+                self.kernel_transposed
+            } else {
+                self.kernel
+            };
+
             check_cuda(cuLaunchKernel(
-                self.kernel,
+                kernel_to_use,
                 grid_size,
                 1,
                 1,

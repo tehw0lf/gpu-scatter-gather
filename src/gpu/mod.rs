@@ -168,6 +168,129 @@ impl GpuContext {
         crate::transpose::transpose_to_rowmajor(&column_major, batch_size as usize, word_length)
     }
 
+    /// Generate batch on device and return device pointer (zero-copy)
+    ///
+    /// This method generates words directly in GPU memory without copying to host.
+    /// The caller is responsible for freeing the returned device pointer.
+    ///
+    /// Returns: (device_pointer, total_bytes)
+    pub fn generate_batch_device(
+        &self,
+        charsets: &HashMap<usize, Vec<u8>>,
+        mask: &[usize],
+        start_idx: u64,
+        batch_size: u64,
+    ) -> Result<(CUdeviceptr, usize)> {
+        unsafe {
+            // Prepare charset data
+            let mut charset_data = Vec::new();
+            let mut charset_offsets = Vec::new();
+            let mut charset_sizes = Vec::new();
+
+            let max_charset_id = *mask.iter().max().unwrap_or(&0);
+            for id in 0..=max_charset_id {
+                if let Some(charset) = charsets.get(&id) {
+                    charset_offsets.push(charset_data.len() as i32);
+                    charset_sizes.push(charset.len() as i32);
+                    charset_data.extend_from_slice(charset);
+                } else {
+                    charset_offsets.push(0);
+                    charset_sizes.push(0);
+                }
+            }
+
+            let mask_pattern: Vec<i32> = mask.iter().map(|&x| x as i32).collect();
+            let word_length = mask.len() as i32;
+
+            // Allocate GPU memory
+            let mut d_charset_data = 0u64;
+            let mut d_charset_offsets = 0u64;
+            let mut d_charset_sizes = 0u64;
+            let mut d_mask_pattern = 0u64;
+            let mut d_output = 0u64;
+
+            let output_size = batch_size as usize * (word_length as usize + 1); // +1 for newline
+
+            check_cuda(cuMemAlloc_v2(&mut d_charset_data, charset_data.len()))?;
+            check_cuda(cuMemAlloc_v2(
+                &mut d_charset_offsets,
+                charset_offsets.len() * std::mem::size_of::<i32>(),
+            ))?;
+            check_cuda(cuMemAlloc_v2(
+                &mut d_charset_sizes,
+                charset_sizes.len() * std::mem::size_of::<i32>(),
+            ))?;
+            check_cuda(cuMemAlloc_v2(
+                &mut d_mask_pattern,
+                mask_pattern.len() * std::mem::size_of::<i32>(),
+            ))?;
+            check_cuda(cuMemAlloc_v2(&mut d_output, output_size))?;
+
+            // Copy data to GPU
+            check_cuda(cuMemcpyHtoD_v2(
+                d_charset_data,
+                charset_data.as_ptr() as *const _,
+                charset_data.len(),
+            ))?;
+            check_cuda(cuMemcpyHtoD_v2(
+                d_charset_offsets,
+                charset_offsets.as_ptr() as *const _,
+                charset_offsets.len() * std::mem::size_of::<i32>(),
+            ))?;
+            check_cuda(cuMemcpyHtoD_v2(
+                d_charset_sizes,
+                charset_sizes.as_ptr() as *const _,
+                charset_sizes.len() * std::mem::size_of::<i32>(),
+            ))?;
+            check_cuda(cuMemcpyHtoD_v2(
+                d_mask_pattern,
+                mask_pattern.as_ptr() as *const _,
+                mask_pattern.len() * std::mem::size_of::<i32>(),
+            ))?;
+
+            // Launch kernel (use standard kernel for now)
+            let block_size: u32 = 256;
+            let grid_size: u32 = ((batch_size + block_size as u64 - 1) / block_size as u64) as u32;
+
+            let mut params = [
+                &d_charset_data as *const _ as *mut _,
+                &d_charset_offsets as *const _ as *mut _,
+                &d_charset_sizes as *const _ as *mut _,
+                &d_mask_pattern as *const _ as *mut _,
+                &start_idx as *const _ as *mut _,
+                &word_length as *const _ as *mut _,
+                &d_output as *const _ as *mut _,
+                &batch_size as *const _ as *mut _,
+            ];
+
+            check_cuda(cuLaunchKernel(
+                self.kernel,
+                grid_size,
+                1,
+                1,
+                block_size,
+                1,
+                1,
+                0,
+                ptr::null_mut(),
+                params.as_mut_ptr(),
+                ptr::null_mut(),
+            ))?;
+
+            // Wait for completion
+            check_cuda(cuCtxSynchronize())?;
+
+            // Cleanup temporary GPU memory (keep d_output)
+            check_cuda(cuMemFree_v2(d_charset_data))?;
+            check_cuda(cuMemFree_v2(d_charset_offsets))?;
+            check_cuda(cuMemFree_v2(d_charset_sizes))?;
+            check_cuda(cuMemFree_v2(d_mask_pattern))?;
+
+            // Return device pointer (caller must free)
+            Ok((d_output, output_size))
+        }
+    }
+
     /// Internal implementation for word generation
     fn generate_batch_internal(
         &self,

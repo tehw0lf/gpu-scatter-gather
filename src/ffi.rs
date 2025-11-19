@@ -8,6 +8,7 @@ use std::os::raw::c_char;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use crate::gpu::GpuContext;
+use cuda_driver_sys::*;
 
 // Error codes (matching C API specification)
 pub const WG_SUCCESS: i32 = 0;
@@ -19,10 +20,35 @@ pub const WG_ERROR_NOT_CONFIGURED: i32 = -5;
 pub const WG_ERROR_BUFFER_TOO_SMALL: i32 = -6;
 pub const WG_ERROR_KEYSPACE_OVERFLOW: i32 = -7;
 
+// Output format modes
+pub const WG_FORMAT_NEWLINES: i32 = 0;  // Default: "word\n"
+pub const WG_FORMAT_FIXED_WIDTH: i32 = 1;  // Future: fixed width padding
+pub const WG_FORMAT_PACKED: i32 = 2;  // Future: no separators
+
 /// Opaque handle to wordlist generator (exported to C)
 #[repr(C)]
 pub struct WordlistGenerator {
     _private: [u8; 0], // Zero-sized, prevents construction in C
+}
+
+/// Device batch result (zero-copy GPU memory access)
+///
+/// Contains a GPU device pointer for direct kernel-to-kernel data passing.
+/// Memory is automatically freed on next generation or wg_destroy().
+#[repr(C)]
+pub struct BatchDevice {
+    /// Device pointer to candidates (CUdeviceptr)
+    pub data: u64,
+    /// Number of candidates generated
+    pub count: u64,
+    /// Length of each word in characters
+    pub word_length: usize,
+    /// Bytes between word starts (stride)
+    pub stride: usize,
+    /// Total buffer size in bytes
+    pub total_bytes: usize,
+    /// Output format used (WG_FORMAT_*)
+    pub format: i32,
 }
 
 /// Internal generator state (not exposed to C)
@@ -30,6 +56,26 @@ struct GeneratorInternal {
     gpu: GpuContext,
     charsets: HashMap<usize, Vec<u8>>,
     mask: Option<Vec<usize>>,
+    current_batch: Option<CUdeviceptr>,  // Track active device memory
+    owns_context: bool,  // Whether we created the CUDA context
+}
+
+impl GeneratorInternal {
+    /// Free current device batch memory (if any)
+    fn free_current_batch(&mut self) {
+        if let Some(ptr) = self.current_batch.take() {
+            unsafe {
+                let _ = cuMemFree_v2(ptr);
+            }
+        }
+    }
+}
+
+impl Drop for GeneratorInternal {
+    fn drop(&mut self) {
+        // Free any outstanding device memory
+        self.free_current_batch();
+    }
 }
 
 // Thread-local error storage
@@ -56,24 +102,37 @@ unsafe fn handle_to_internal<'a>(
 /// Create a new wordlist generator
 ///
 /// # Arguments
-/// * `ctx` - CUDA context (NULL to create new)
-/// * `device_id` - CUDA device ID (0 for first GPU)
+/// * `ctx` - CUDA context (NULL to create new, non-NULL to use existing)
+/// * `device_id` - CUDA device ID (0 for first GPU, ignored if ctx provided)
 ///
 /// # Returns
 /// Generator handle, or NULL on error
 #[no_mangle]
 pub extern "C" fn wg_create(
-    _ctx: *mut std::ffi::c_void, // TODO: Phase 2 will use this
-    _device_id: i32,
+    ctx: *mut std::ffi::c_void,
+    _device_id: i32,  // TODO: Support device selection when ctx is NULL
 ) -> *mut WordlistGenerator {
     // Catch any panics and return NULL
     let result = std::panic::catch_unwind(|| {
-        // Create GPU context
-        let gpu = match GpuContext::new() {
-            Ok(g) => g,
-            Err(e) => {
-                set_error(format!("Failed to create GPU context: {}", e));
-                return std::ptr::null_mut();
+        let (gpu, owns_context) = if ctx.is_null() {
+            // Create our own GPU context
+            match GpuContext::new() {
+                Ok(g) => (g, true),
+                Err(e) => {
+                    set_error(format!("Failed to create GPU context: {}", e));
+                    return std::ptr::null_mut();
+                }
+            }
+        } else {
+            // Use provided CUDA context
+            // For now, we still create our own context
+            // TODO: Add GpuContext::from_existing(ctx) in future
+            match GpuContext::new() {
+                Ok(g) => (g, true),
+                Err(e) => {
+                    set_error(format!("Failed to create GPU context: {}", e));
+                    return std::ptr::null_mut();
+                }
             }
         };
 
@@ -82,6 +141,8 @@ pub extern "C" fn wg_create(
             gpu,
             charsets: HashMap::new(),
             mask: None,
+            current_batch: None,
+            owns_context,
         });
 
         // Convert to opaque pointer
@@ -364,5 +425,121 @@ pub extern "C" fn wg_generate_batch_host(
             set_error(format!("Generation failed: {}", e));
             WG_ERROR_CUDA as isize
         }
+    }
+}
+
+/// Generate batch in GPU memory (zero-copy)
+///
+/// This function generates candidates directly in GPU memory without copying to host.
+/// The device pointer remains valid until the next generation call or wg_destroy().
+///
+/// # Arguments
+/// * `gen` - Generator handle
+/// * `start_idx` - Starting index in keyspace
+/// * `count` - Number of candidates to generate
+/// * `batch` - Output structure to fill with device pointer info
+///
+/// # Returns
+/// WG_SUCCESS or error code
+#[no_mangle]
+pub extern "C" fn wg_generate_batch_device(
+    gen: *mut WordlistGenerator,
+    start_idx: u64,
+    count: u64,
+    batch: *mut BatchDevice,
+) -> i32 {
+    let internal = unsafe {
+        match handle_to_internal(gen) {
+            Some(g) => g,
+            None => return WG_ERROR_INVALID_HANDLE,
+        }
+    };
+
+    if batch.is_null() {
+        set_error("Null batch pointer".to_string());
+        return WG_ERROR_INVALID_PARAM;
+    }
+
+    let mask = match &internal.mask {
+        Some(m) => m.clone(),
+        None => {
+            set_error("Generator not configured".to_string());
+            return WG_ERROR_NOT_CONFIGURED;
+        }
+    };
+
+    // Free previous batch (if any)
+    internal.free_current_batch();
+
+    // Convert HashMap
+    let charsets_map: HashMap<usize, Vec<u8>> = internal.charsets.clone();
+
+    // Generate batch on device
+    let result = internal.gpu.generate_batch_device(
+        &charsets_map,
+        &mask,
+        start_idx,
+        count,
+    );
+
+    match result {
+        Ok((device_ptr, total_bytes)) => {
+            // Store device pointer for auto-cleanup
+            internal.current_batch = Some(device_ptr);
+
+            // Fill batch structure
+            let word_length = mask.len();
+            let stride = word_length + 1; // +1 for newline
+
+            unsafe {
+                (*batch).data = device_ptr;
+                (*batch).count = count;
+                (*batch).word_length = word_length;
+                (*batch).stride = stride;
+                (*batch).total_bytes = total_bytes;
+                (*batch).format = WG_FORMAT_NEWLINES;
+            }
+
+            WG_SUCCESS
+        }
+        Err(e) => {
+            set_error(format!("Device generation failed: {}", e));
+            WG_ERROR_CUDA
+        }
+    }
+}
+
+/// Free device batch memory early (optional)
+///
+/// Device memory is automatically freed on next generation or wg_destroy(),
+/// but this function allows explicit early cleanup.
+///
+/// # Arguments
+/// * `gen` - Generator handle
+/// * `batch` - Batch to free (data pointer will be set to 0)
+#[no_mangle]
+pub extern "C" fn wg_free_batch_device(
+    gen: *mut WordlistGenerator,
+    batch: *mut BatchDevice,
+) {
+    let internal = unsafe {
+        match handle_to_internal(gen) {
+            Some(g) => g,
+            None => return,
+        }
+    };
+
+    if batch.is_null() {
+        return;
+    }
+
+    // Free device memory
+    internal.free_current_batch();
+
+    // Clear batch structure
+    unsafe {
+        (*batch).data = 0;
+        (*batch).count = 0;
+        (*batch).total_bytes = 0;
     }
 }

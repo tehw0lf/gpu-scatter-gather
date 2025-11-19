@@ -1,325 +1,117 @@
-# Next Session: C API Phase 2 - Device Pointer Implementation
+# Next Session: Phase 4 - Streaming API
 
-**Quick Start**: Implement zero-copy GPU operation for maximum performance
-
----
-
-## TL;DR
-
-Implement **device pointer API** to eliminate PCIe bottleneck and achieve 800-1200 M words/s.
-
-**Current State**: Phase 1 complete - host memory API working (440 M words/s)
-
-**Goal**: Zero-copy GPU operation (800-1200 M words/s, 2-3x improvement)
+**Status**: Ready for Phase 4
+**Estimated Time**: 2-3 hours
 
 ---
 
-## What Phase 1 Delivered
+## Current State (End of Session 2025-11-19)
 
-✅ **Core C FFI Layer Complete**:
-- 8 C API functions for host-side generation
-- Automatic header generation with cbindgen
-- Thread-local error handling
-- Full input validation and safety guarantees
-- All integration tests passing
+✅ **Phase 1 Complete** - Host memory API (8 functions, 440 M words/s)
+✅ **Phase 2 Complete** - Device pointer API (zero-copy, 100-200x latency improvement)
+✅ **Phase 3 Complete** - Output format modes (11.1% memory savings with PACKED)
 
-**Files Created**:
-- `src/ffi.rs` (350 lines) - Core FFI implementation
-- `cbindgen.toml` - Header generation config
-- `include/wordlist_generator.h` - Auto-generated C header
-- `tests/ffi_basic_test.c` - C integration tests
-- `docs/PHASE1_SUMMARY.md` - Complete documentation
-
-**Current Performance**: ~440 M words/s (PCIe bottleneck)
+**All Tests Passing**: 10/10 FFI tests
+**Documentation**: Complete for Phases 1-3
 
 ---
 
-## Phase 2 Objectives
+## Phase 4: Streaming API (Async Generation)
 
-### 1. Device Batch Structure (30 min)
+### Objective
 
-Add to `src/ffi.rs`:
+Implement asynchronous generation using CUDA streams to enable:
+- Overlapping generation with hash kernel execution
+- Pipeline multiple batches for continuous processing
+- Non-blocking API calls
 
+### Implementation
+
+**Add to `src/ffi.rs`**:
 ```rust
-/// Device batch result (exposed to C)
-#[repr(C)]
-pub struct BatchDevice {
-    /// Device pointer to candidates
-    pub data: u64,  // CUdeviceptr
-    /// Number of candidates
-    pub count: u64,
-    /// Length of each word (chars)
-    pub word_length: usize,
-    /// Bytes between word starts
-    pub stride: usize,
-    /// Total buffer size
-    pub total_bytes: usize,
-    /// Output format used
-    pub format: i32,
-}
-```
-
-### 2. Device Generation Functions (2-3h)
-
-```rust
-/// Generate batch in GPU memory (zero-copy)
 #[no_mangle]
-pub extern "C" fn wg_generate_batch_device(
+pub extern "C" fn wg_generate_batch_stream(
     gen: *mut WordlistGenerator,
+    stream: CUstream,
     start_idx: u64,
     count: u64,
     batch: *mut BatchDevice,
-) -> i32 {
-    // Validate inputs
-    // Generate to GPU memory (no host transfer)
-    // Fill BatchDevice struct
-    // Store device pointer in internal state
-    // Return WG_SUCCESS or error
-}
-
-/// Free device batch (optional early cleanup)
-#[no_mangle]
-pub extern "C" fn wg_free_batch_device(
-    gen: *mut WordlistGenerator,
-    batch: *mut BatchDevice,
-) {
-    // Free GPU memory
-    // Set batch->data = 0
-}
+) -> i32
 ```
 
-### 3. Internal State Updates (1h)
+**Key Changes**:
+- Accept `CUstream` parameter
+- Launch kernel on provided stream (non-blocking)
+- Return immediately without synchronization
+- Update `GpuContext::generate_batch_device()` to accept optional stream
 
-Update `GeneratorInternal`:
+**Usage Pattern**:
+```c
+CUstream stream;
+cuStreamCreate(&stream, 0);
 
-```rust
-struct GeneratorInternal {
-    gpu: GpuContext,
-    charsets: HashMap<usize, Vec<u8>>,
-    mask: Option<Vec<usize>>,
-    current_batch: Option<CUdeviceptr>,  // Track active device memory
-}
-
-impl GeneratorInternal {
-    fn free_current_batch(&mut self) {
-        if let Some(ptr) = self.current_batch.take() {
-            unsafe { cuMemFree_v2(ptr); }
-        }
-    }
-}
+wg_generate_batch_stream(gen, stream, 0, 100000000, &batch);
+// Do other work while generation happens...
+cuStreamSynchronize(stream);  // Wait when needed
 ```
 
-### 4. External CUDA Context Support (1h)
-
-Update `wg_create()` to accept user-provided CUDA context:
-
-```rust
-#[no_mangle]
-pub extern "C" fn wg_create(
-    ctx: CUcontext,  // User's context or NULL
-    device_id: i32,
-) -> *mut WordlistGenerator {
-    // If ctx != NULL: use it
-    // If ctx == NULL: create own context
-    // Track ownership for cleanup
-}
-```
-
-### 5. C Integration Tests (1h)
+### Testing
 
 Add to `tests/ffi_basic_test.c`:
+- `test_stream_generation()` - Basic async generation
+- `test_stream_overlap()` - Verify non-blocking behavior
 
-```c
-void test_device_generation() {
-    wg_handle_t gen = wg_create(NULL, 0);
-    wg_set_charset(gen, 1, "abc", 3);
-    int mask[] = {1, 1, 1};
-    wg_set_mask(gen, mask, 3);
+### Documentation
 
-    wg_batch_device_t batch;
-    int result = wg_generate_batch_device(gen, 0, 1000, &batch);
-    assert(result == WG_SUCCESS);
-    assert(batch.data != 0);  // Valid device pointer
-    assert(batch.count == 1000);
+- Create `docs/api/PHASE4_SUMMARY.md`
+- Update `docs/api/C_API_SPECIFICATION.md` status
 
-    // Optional: Copy back and verify
-    char* host_buffer = malloc(batch.total_bytes);
-    cuMemcpyDtoH(host_buffer, batch.data, batch.total_bytes);
-    // Verify contents...
-    free(host_buffer);
-
-    wg_free_batch_device(gen, &batch);
-    wg_destroy(gen);
-}
-```
-
-### 6. Documentation (30 min)
-
-Update `docs/PHASE1_SUMMARY.md` → `docs/C_API_SUMMARY.md`:
-- Document Phase 2 additions
-- Zero-copy usage examples
-- Performance comparison
-- Device pointer lifetime rules
+**Estimated Time**: 2-3 hours
 
 ---
 
-## Key Implementation Notes
+## Phase 5: Utility Functions (Optional)
 
-### Device Pointer Lifetime
+### Quick Wins
 
-```c
-// Pattern 1: Auto-free on next generation
-wg_batch_device_t batch1, batch2;
-wg_generate_batch_device(gen, 0, 1000, &batch1);
-// batch1.data is valid
+Add simple utility functions:
+- `wg_get_version()` - Return version info
+- `wg_cuda_available()` - Check CUDA availability
+- `wg_get_device_count()` - Get number of GPUs
 
-wg_generate_batch_device(gen, 1000, 1000, &batch2);
-// batch1.data is now INVALID (freed automatically)
-// batch2.data is valid
-
-wg_destroy(gen);
-// batch2.data is now INVALID
-```
-
-```c
-// Pattern 2: Explicit early free
-wg_batch_device_t batch;
-wg_generate_batch_device(gen, 0, 1000, &batch);
-// Use batch...
-wg_free_batch_device(gen, &batch);
-// batch.data is now INVALID (freed early)
-```
-
-### Integration with Hash Kernels
-
-```c
-// Example: hashcat-style zero-copy pipeline
-wg_batch_device_t batch;
-wg_generate_batch_device(gen, 0, 100000000, &batch);
-
-// Use device pointer directly in hash kernel
-md5_hash_kernel<<<grid, block>>>(
-    (const char*)batch.data,
-    batch.stride,
-    batch.count,
-    d_hashes_out
-);
-
-cuStreamSynchronize(stream);
-```
+**Estimated Time**: 1-2 hours
 
 ---
 
-## Success Criteria
-
-- ✅ `wg_generate_batch_device()` generates to GPU memory
-- ✅ No PCIe transfer (verified with nvprof)
-- ✅ Device pointer valid until next generation or wg_destroy()
-- ✅ All C tests pass
-- ✅ Performance: 800-1200 M words/s (2-3x improvement)
-
----
-
-## Testing Strategy
-
-1. **Unit Tests**: Verify device pointer generation
-2. **Memory Leak Tests**: Run with `cuda-memcheck`
-3. **Performance Tests**: Benchmark vs Phase 1
-4. **Integration Tests**: Simple hash kernel that consumes device pointer
-
----
-
-## Expected Timeline
-
-- Device batch structure: 30 min
-- Device generation functions: 2-3 hours
-- Internal state updates: 1 hour
-- External context support: 1 hour
-- C integration tests: 1 hour
-- Documentation: 30 min
-- **Total**: 5-7 hours (one focused session)
-
----
-
-## What Success Looks Like
-
-```
-Phase 1 Baseline: 440 M words/s
-Phase 2 Result:   1000 M words/s (+2.3x)
-
-nvprof Analysis:
-  No PCIe transfers detected (100% GPU-side)
-  Memory bandwidth: 85-95% utilization
-  Kernel time: Same as Phase 1
-  End-to-end time: 2-3x faster (no host copy)
-
-Conclusion: PCIe bottleneck eliminated! 🚀
-```
-
----
-
-## Files to Modify
-
-**Core Implementation**:
-- `src/ffi.rs` - Add device pointer functions
-- `src/gpu/mod.rs` - Update to support device pointer return (if needed)
-
-**Testing**:
-- `tests/ffi_basic_test.c` - Add device pointer tests
-
-**Documentation**:
-- `docs/C_API_SUMMARY.md` - Update with Phase 2 features
-- `docs/PHASE2_SUMMARY.md` - Create implementation summary
-
-**Build**:
-- No changes needed (cbindgen handles new structs automatically)
-
----
-
-## Quick Reminders
-
-1. **Memory Management**: Track device pointers, auto-free on next generation
-2. **Safety**: Validate batch pointer before dereferencing
-3. **Error Handling**: Return error codes, set thread-local messages
-4. **Documentation**: Update header comments for cbindgen
-5. **Testing**: Verify zero-copy with nvprof/Nsight
-
----
-
-## Start Here
+## Quick Start Commands
 
 ```bash
-# 1. Review Phase 1 implementation
-cat src/ffi.rs
-cat docs/PHASE1_SUMMARY.md
-
-# 2. Check current performance
+# Build and test current state
+cargo build --release
+gcc -o test_ffi tests/ffi_basic_test.c -I. -I/opt/cuda/targets/x86_64-linux/include \
+    -L./target/release -lgpu_scatter_gather -Wl,-rpath,./target/release
 ./test_ffi
 
-# 3. Add BatchDevice struct
-vim src/ffi.rs
+# All 10 tests should pass
 
-# 4. Implement wg_generate_batch_device()
-# 5. Add tests
-# 6. Benchmark
+# Review Phase 3 completion
+cat docs/api/PHASE3_SUMMARY.md
 
-# 7. Profile with nvprof
-nvprof --print-gpu-trace ./test_ffi_device
-
-# Expected: No HtoD/DtoH transfers!
+# Check API specification for Phase 4 details
+grep -A 30 "Streaming API" docs/api/C_API_SPECIFICATION.md
 ```
 
 ---
 
-## After Phase 2
+## Files to Reference
 
-**Remaining Phases**:
-- **Phase 3**: Output format modes (3-4 hours)
-- **Phase 4**: Streaming API (2-3 hours)
-- **Phase 5**: Utility functions (2-3 hours)
-
-**Total Remaining**: 12-16 hours (2-3 more sessions)
+- `docs/api/C_API_SPECIFICATION.md` - Complete API spec (lines 343-382 for streaming)
+- `docs/api/PHASE1_SUMMARY.md` - Phase 1 details
+- `docs/api/PHASE2_SUMMARY.md` - Phase 2 details
+- `docs/api/PHASE3_SUMMARY.md` - Phase 3 details
+- `src/ffi.rs` - Current FFI implementation
+- `src/gpu/mod.rs` - GPU context (update for streams)
 
 ---
 
-**Let's eliminate that PCIe bottleneck! 🔥**
+**Ready to implement streaming API! 🚀**

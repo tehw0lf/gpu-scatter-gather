@@ -6,10 +6,11 @@
 [![Rust](https://img.shields.io/badge/rust-1.82+-orange.svg)](https://www.rust-lang.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-11.8+-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
 
-> ✅ **Status:** Phase 2 Complete - Production Kernel Working!
+> ✅ **Status:** Phase 2.7 (C API) - Phase 1 Complete!
 >
 > The production GPU kernel is **working and validated** with **1.2B+ words/s** throughput!
-> See [Phase 2 Results](docs/PHASE2_RESULTS.md) for detailed benchmarks.
+> C FFI layer now available for integration into existing tools.
+> See [Development Log](docs/development/DEVELOPMENT_LOG.md) for detailed progress.
 
 ## Overview
 
@@ -40,31 +41,34 @@ This enables:
 | maskprocessor (CPU) | 142M words/s | 1.0x (baseline) |
 | crunch (CPU) | 5M words/s | 0.035x |
 
-*Note: Production benchmarks include full memory I/O and PCIe transfers. See [Phase 2 Results](docs/PHASE2_RESULTS.md) for details.*
+*Note: Production benchmarks include full memory I/O and PCIe transfers. See [Benchmarking docs](docs/benchmarking/) for methodology and detailed results.*
 
 ## Features
 
-### Current (Phase 2 - Production Kernel Complete ✅)
+### Current (Phase 2.7 - C API Layer ✅)
 
 - ✅ CPU reference implementation with full test coverage (25 tests passing)
 - ✅ CUDA kernel infrastructure with multi-architecture support
 - ✅ **Production GPU kernel with memory output (635M-1.2B+ words/s)**
-- ✅ **100% output correctness validated**
+- ✅ **100% output correctness validated with formal proofs**
 - ✅ Mixed-radix index-to-word algorithm validated
 - ✅ Hashcat-compatible mask format (`?1?2?3`)
 - ✅ Working CLI for simple wordlist generation
+- ✅ **C Foreign Function Interface (FFI) for library integration**
 - ✅ Comprehensive documentation and benchmarks
 - ✅ Clean Rust API with RAII memory management
 
-### Planned (Phase 3-5)
+### In Progress (Phase 2.7 Phase 2)
 
-- 🔄 Stdout streaming (pipe to hashcat)
-- 🔄 In-memory zero-copy API
-- 🔄 Memory-mapped file output
+- 🔄 **Device pointer API (zero-copy GPU operation)**
+- 🔄 Output format modes (newlines, fixed-width, packed)
+- 🔄 CUDA stream API for async generation
+
+### Planned (Phase 3+)
+
 - 🔄 Multi-GPU support
-- 🔄 Python/Node.js/C bindings
-- 🔄 Network streaming for distributed generation
-- 🔄 Advanced optimizations (Barrett reduction, power-of-2 charsets, pinned memory)
+- 🔄 Python/Node.js language bindings
+- 🔄 Advanced optimizations (Barrett reduction, power-of-2 charsets)
 
 ## Quick Start
 
@@ -184,7 +188,7 @@ __global__ void generate_words_kernel(
 
 ### Phase 2 Production Results ✅
 
-See detailed results in [docs/PHASE2_RESULTS.md](docs/PHASE2_RESULTS.md).
+See detailed results in [docs/benchmarking/](docs/benchmarking/).
 
 **Production Performance (with full memory I/O):**
 
@@ -210,7 +214,7 @@ See detailed results in [docs/PHASE2_RESULTS.md](docs/PHASE2_RESULTS.md).
 
 ### Phase 1 POC Results
 
-See [docs/POC_RESULTS.md](docs/POC_RESULTS.md) for the initial proof-of-concept results that validated the algorithm.
+See [docs/archive/POC_RESULTS.md](docs/archive/POC_RESULTS.md) for the initial proof-of-concept results that validated the algorithm.
 
 ## Project Structure
 
@@ -234,8 +238,13 @@ gpu-scatter-gather/
 ├── tests/                  # Integration tests
 ├── benches/                # Criterion benchmarks
 ├── docs/
-│   ├── POC_RESULTS.md      # Phase 1 POC documentation
-│   └── PHASE2_RESULTS.md   # Phase 2 production results
+│   ├── api/                # C API & FFI documentation
+│   ├── design/             # Architecture and design
+│   ├── validation/         # Correctness validation
+│   ├── benchmarking/       # Performance measurement
+│   ├── guides/             # User and integration guides
+│   ├── development/        # Internal development docs
+│   └── archive/            # Historical documents
 └── build.rs                # CUDA kernel compilation
 ```
 
@@ -412,7 +421,7 @@ When asked *"What algorithm would you suggest for a GPU-based approach that woul
 
 The entire development—from algorithm design through Rust/CUDA implementation, mathematical proofs, validation, and documentation—represents genuine human-AI pair programming in systems research, where the human provides direction, domain expertise, and validation while the AI provides implementation and formalization.
 
-**Full transparency:** See [docs/DEVELOPMENT_PROCESS.md](docs/DEVELOPMENT_PROCESS.md) for detailed methodology and contribution breakdown.
+**Full transparency:** See [docs/development/DEVELOPMENT_PROCESS.md](docs/development/DEVELOPMENT_PROCESS.md) for detailed methodology and contribution breakdown.
 
 ### Contributing to the Project
 
@@ -451,7 +460,7 @@ Choose whichever license suits your use case.
 - **Claude Code (Anthropic)** - AI partner in algorithm design, implementation, and validation
   - Autonomously proposed the mixed-radix direct indexing algorithm
   - Collaborative development of CUDA kernels and mathematical proofs
-  - See [docs/DEVELOPMENT_PROCESS.md](docs/DEVELOPMENT_PROCESS.md) for full methodology
+  - See [docs/development/DEVELOPMENT_PROCESS.md](docs/development/DEVELOPMENT_PROCESS.md) for full methodology
 
 ## Contact
 

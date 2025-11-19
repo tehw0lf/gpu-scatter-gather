@@ -1031,6 +1031,171 @@ __global__ void generate_words_kernel(
 
 **Status:** ✅ **COMPLETE** (Formal Specification + Baseline Benchmarking)
 
+## Phase 2.7: C API / FFI Layer (November 19, 2025)
+
+**Status:** ✅ **COMPLETE** (Phase 1 - Host Memory API)
+
+### Phase 1: Core C API (COMPLETE)
+
+- [x] **Build System Integration**
+  - [x] Configure cbindgen for automatic header generation
+  - [x] Update Cargo.toml with cdylib crate type
+  - [x] Integrate header generation into build.rs
+  - [x] Generate include/wordlist_generator.h
+
+- [x] **FFI Module Implementation (src/ffi.rs)**
+  - [x] Opaque handle pattern for memory safety
+  - [x] Thread-local error handling
+  - [x] Panic catching at FFI boundary
+  - [x] 8 core C API functions:
+    * wg_create() - Initialize generator
+    * wg_destroy() - Free resources
+    * wg_set_charset() - Define charsets (1-255)
+    * wg_set_mask() - Set word pattern (max 32 positions)
+    * wg_keyspace_size() - Calculate total candidates
+    * wg_calculate_buffer_size() - Memory requirements
+    * wg_generate_batch_host() - Generate to host memory
+    * wg_get_error() - Retrieve error messages
+
+- [x] **Safety Guarantees**
+  - [x] All pointers validated for NULL
+  - [x] Array indices bounds-checked
+  - [x] No panics across FFI boundary
+  - [x] Proper memory management (Box ownership)
+  - [x] Thread-safe error storage
+
+- [x] **Integration Tests (tests/ffi_basic_test.c)**
+  - [x] Create/destroy lifecycle
+  - [x] Configuration validation
+  - [x] Keyspace calculation (verified 3^4 = 81)
+  - [x] Host-side generation (32 bytes, 8 words)
+  - [x] Error handling
+
+- [x] **Documentation**
+  - [x] docs/PHASE1_SUMMARY.md - Implementation summary
+  - [x] Auto-generated API docs in header file
+  - [x] Usage examples
+
+**Test Results:** All 4 C integration tests passed ✅
+
+**Performance (Phase 1):**
+- Throughput: ~440 M words/s (12-char passwords)
+- Bottleneck: PCIe bandwidth (memory copy from GPU)
+
+### Phase 2: Device Pointer API (NEXT)
+
+**Objective:** Zero-copy GPU operation for maximum performance
+
+- [ ] **Device Batch Structure**
+  ```c
+  typedef struct {
+      CUdeviceptr data;           // Device pointer to candidates
+      uint64_t count;             // Number of candidates
+      size_t word_length;         // Length of each word
+      size_t stride;              // Bytes between word starts
+      size_t total_bytes;         // Total buffer size
+      wg_output_format_t format;  // Format used
+  } wg_batch_device_t;
+  ```
+
+- [ ] **Device Memory Functions**
+  - [ ] wg_generate_batch_device() - Generate to GPU memory
+  - [ ] wg_free_batch_device() - Explicit GPU memory management
+  - [ ] Internal: Track device pointer lifetime
+  - [ ] Internal: Auto-free on next generation or wg_destroy()
+
+- [ ] **External CUDA Context Support**
+  - [ ] Use user-provided CUcontext in wg_create()
+  - [ ] Library creates context only if NULL passed
+  - [ ] Proper context ownership tracking
+
+- [ ] **Testing**
+  - [ ] C test for device pointer API
+  - [ ] Verify zero-copy behavior (no host transfer)
+  - [ ] Memory leak testing with CUDA memcheck
+  - [ ] Integration test with simple hash kernel
+
+- [ ] **Documentation**
+  - [ ] Update C API specification
+  - [ ] Zero-copy usage examples
+  - [ ] Performance comparison (host vs device)
+
+**Expected Performance (Phase 2):**
+- Throughput: 800-1200 M words/s (2-3x improvement)
+- Zero PCIe overhead
+- Direct kernel-to-kernel data passing
+
+**Estimated Time:** 4-6 hours
+
+### Phase 3: Output Format Modes
+
+- [ ] **Format Enum**
+  ```c
+  typedef enum {
+      WG_FORMAT_NEWLINES = 0,     // Each word terminated by '\n'
+      WG_FORMAT_FIXED_WIDTH = 1,  // Fixed-width, null-padded
+      WG_FORMAT_PACKED = 2,       // No separators, packed
+  } wg_output_format_t;
+  ```
+
+- [ ] **Format Configuration**
+  - [ ] wg_set_output_format() - Set output format
+  - [ ] Update buffer size calculation for each format
+  - [ ] Update stride calculation
+
+- [ ] **Kernel Implementations**
+  - [ ] Newline kernel (existing, default)
+  - [ ] Fixed-width kernel (null-padding)
+  - [ ] Packed kernel (no separators)
+
+- [ ] **Testing**
+  - [ ] Test each format mode
+  - [ ] Verify buffer size calculations
+  - [ ] Performance comparison
+
+**Estimated Time:** 3-4 hours
+
+### Phase 4: Streaming API
+
+- [ ] **Async Generation with CUDA Streams**
+  - [ ] wg_generate_batch_stream() - Async generation
+  - [ ] Pipeline: overlap generation with hash computation
+  - [ ] Stream synchronization helpers
+
+- [ ] **Testing**
+  - [ ] Async behavior verification
+  - [ ] Pipeline performance testing
+
+**Estimated Time:** 2-3 hours
+
+### Phase 5: Utility Functions
+
+- [ ] **Version & Device Info**
+  - [ ] wg_get_version() - Library version
+  - [ ] wg_cuda_available() - Check CUDA availability
+  - [ ] wg_get_device_count() - Number of GPUs
+  - [ ] wg_get_device_properties() - GPU capabilities
+
+- [ ] **Reverse Lookup**
+  - [ ] wg_word_to_index() - Convert word to index
+  - [ ] Validate word against mask
+
+- [ ] **Testing**
+  - [ ] Test all utility functions
+  - [ ] Version consistency checks
+
+**Estimated Time:** 2-3 hours
+
+### C API Total Timeline
+
+- ✅ **Phase 1**: Core host API (COMPLETE - 2 hours)
+- **Phase 2**: Device pointers (4-6 hours)
+- **Phase 3**: Output formats (3-4 hours)
+- **Phase 4**: Streaming API (2-3 hours)
+- **Phase 5**: Utilities (2-3 hours)
+
+**Total Estimated Time:** 13-18 hours remaining
+
 ### Mathematical Foundations
 
 - [x] **Formal Algorithm Specification** (COMPLETE)

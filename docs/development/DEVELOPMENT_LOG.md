@@ -756,3 +756,161 @@ Each optimization can be validated with:
 **Last Updated:** November 9, 2025
 **Author:** tehw0lf + Claude Code (AI-assisted development)
 **Status:** Phase 2.6 Complete - Ready for Phase 3 Optimizations
+
+---
+
+## Phase 2.7: C API / FFI Layer (November 19, 2025)
+
+**Status:** Phase 1 Complete ✅
+
+### Objectives
+- Create C Foreign Function Interface for library integration
+- Enable embedding in password crackers (hashcat, John the Ripper)
+- Implement host-side generation API
+- Establish foundation for device pointer API
+
+### Phase 1 Implementation (COMPLETE - November 19, 2025)
+
+**Build System Integration:**
+- Installed cbindgen 0.29.2 for automatic header generation
+- Created `cbindgen.toml` configuration
+- Updated `build.rs` to generate C headers on every build
+- Modified `Cargo.toml` to build both cdylib (C) and rlib (Rust)
+
+**FFI Module (`src/ffi.rs` - 350 lines):**
+
+Implemented 8 C API functions:
+1. `wg_create()` - Initialize generator instance
+2. `wg_destroy()` - Free all resources
+3. `wg_set_charset()` - Define character sets (1-255)
+4. `wg_set_mask()` - Set word pattern (max 32 positions)
+5. `wg_keyspace_size()` - Calculate total candidates
+6. `wg_calculate_buffer_size()` - Memory requirements
+7. `wg_generate_batch_host()` - Generate to host memory
+8. `wg_get_error()` - Retrieve thread-local error messages
+
+**Safety Guarantees:**
+- Opaque handle pattern (prevents C from accessing internals)
+- Thread-local error storage (no shared mutable state)
+- Panic catching at FFI boundary (no unwinding into C)
+- All pointers validated for NULL before dereference
+- Input validation (charset IDs, mask length, buffer sizes)
+- Proper memory management with Box ownership
+
+**Generated Artifacts:**
+- `include/wordlist_generator.h` (2.9 KB) - Auto-generated C header
+- `libgpu_scatter_gather.so` (393 KB) - Shared library
+- `libgpu_scatter_gather.rlib` (460 KB) - Rust static library
+- All 8 FFI functions properly exported
+
+**Integration Tests (`tests/ffi_basic_test.c`):**
+- ✅ Create/destroy lifecycle
+- ✅ Configuration validation (charsets, masks)
+- ✅ Keyspace calculation (verified 3^4 = 81)
+- ✅ Host-side generation (32 bytes, 8 words)
+- ✅ Error handling (descriptive messages)
+
+**Test Results:**
+```
+=== FFI Basic Tests ===
+✓ create/destroy passed
+✓ configuration passed (keyspace: 81)
+✓ generation passed (32 bytes generated)
+✓ error handling passed
+=== All tests passed! ===
+```
+
+**Performance (Phase 1):**
+- Throughput: ~440 M words/s (12-char passwords)
+- Bottleneck: PCIe bandwidth (memory copy from GPU to host)
+
+**Documentation:**
+- Created `docs/PHASE1_SUMMARY.md` (comprehensive implementation guide)
+- Auto-generated API documentation in C header
+- Usage examples for C integration
+- Updated `docs/TODO.md` with Phase 2+ roadmap
+- Created `COMMIT_MESSAGE.md` for tomorrow's commit
+
+### Key Technical Decisions
+
+**FFI Pattern Choice:**
+- **Opaque Handles:** Used zero-sized struct to prevent C construction
+- **Thread-Local Errors:** Avoids global state, thread-safe
+- **Auto-Generated Headers:** cbindgen ensures header always matches implementation
+- **Error Codes:** Return i32 codes, descriptive messages via `wg_get_error()`
+
+**Memory Management Strategy:**
+- Host allocates output buffer, library fills it
+- Library tracks internal state with Box
+- Auto-cleanup on wg_destroy()
+- No memory leaks (validated with test suite)
+
+**Build Integration:**
+- cbindgen runs on every build via build.rs
+- Dual library output (cdylib + rlib)
+- CUDA kernel compilation preserved
+- Header generation automatic (no manual maintenance)
+
+### Lessons Learned
+
+**What Worked Well:**
+✅ cbindgen automation - zero manual header maintenance
+✅ Opaque handle pattern - clean separation between Rust and C
+✅ Thread-local errors - simple, safe error handling
+✅ Panic catching - robust FFI boundary
+✅ Test-driven approach - caught edge cases early
+
+**Challenges Encountered:**
+⚠️ CUDA header path - required explicit `-I/opt/cuda/...`
+⚠️ Type mapping - usize → size_t required careful review
+⚠️ Documentation - cbindgen preserves Rust doc comments verbatim
+
+### Next Steps: Phase 2 - Device Pointer API
+
+**Objective:** Eliminate PCIe bottleneck with zero-copy GPU operation
+
+**Planned Functions:**
+- `wg_generate_batch_device()` - Generate to GPU memory
+- `wg_free_batch_device()` - Explicit GPU memory management
+
+**Expected Benefits:**
+- 2-3x throughput improvement (800-1200 M words/s)
+- Zero PCIe overhead
+- Direct kernel-to-kernel data passing
+- Enable hashcat-style pipelines
+
+**Estimated Time:** 5-7 hours (one focused session)
+
+### C API Timeline
+
+**Phase 1** (COMPLETE): Host memory API - 2 hours
+**Phase 2** (NEXT): Device pointers - 5-7 hours
+**Phase 3**: Output formats - 3-4 hours
+**Phase 4**: Streaming API - 2-3 hours
+**Phase 5**: Utilities - 2-3 hours
+
+**Total Remaining:** 13-18 hours (2-3 more sessions)
+
+### Files Created/Modified
+
+**New Files:**
+- `src/ffi.rs` - Core FFI implementation
+- `cbindgen.toml` - Header generation config
+- `include/wordlist_generator.h` - Auto-generated C header
+- `tests/ffi_basic_test.c` - C integration tests
+- `docs/PHASE1_SUMMARY.md` - Implementation summary
+- `COMMIT_MESSAGE.md` - Prepared commit message
+
+**Modified Files:**
+- `Cargo.toml` - Added cdylib crate type, cbindgen dependency
+- `build.rs` - Integrated header generation
+- `src/lib.rs` - Exported ffi module
+- `docs/TODO.md` - Updated with C API roadmap
+- `docs/NEXT_SESSION_PROMPT.md` - Phase 2 objectives
+
+---
+
+**Document Version:** 2.1
+**Last Updated:** November 19, 2025
+**Author:** tehw0lf + Claude Code (AI-assisted development)
+**Status:** Phase 2.7 (C API) Phase 1 Complete - Ready for Phase 2 Device Pointers

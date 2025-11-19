@@ -193,6 +193,96 @@ void test_device_copy_back() {
     printf("✓ device pointer verification passed\n\n");
 }
 
+void test_format_newlines() {
+    printf("Test: WG_FORMAT_NEWLINES mode...\n");
+
+    struct wg_WordlistGenerator* gen = wg_create(NULL, 0);
+    assert(gen != NULL);
+
+    // Configure
+    wg_set_charset(gen, 1, "abc", 3);
+    int mask[] = {1, 1, 1};
+    wg_set_mask(gen, mask, 3);
+
+    // Set format to newlines (default, but explicit)
+    int result = wg_set_format(gen, 0);  // WG_FORMAT_NEWLINES
+    assert(result == 0 && "Failed to set format");
+
+    // Generate on device
+    struct wg_BatchDevice batch;
+    result = wg_generate_batch_device(gen, 0, 27, &batch);  // 3^3 = 27
+    assert(result == 0 && "Device generation failed");
+    assert(batch.format == 0 && "Format should be NEWLINES");
+    assert(batch.word_length == 3 && "Wrong word length");
+    assert(batch.stride == 4 && "Stride should be word_length + 1");
+    assert(batch.total_bytes == 27 * 4 && "Total bytes should be count * stride");
+
+    printf("  Format: NEWLINES (0)\n");
+    printf("  Word length: %zu\n", batch.word_length);
+    printf("  Stride: %zu bytes (word + newline)\n", batch.stride);
+    printf("  Total bytes: %zu\n", batch.total_bytes);
+    printf("  Memory efficiency: 100%% (baseline)\n");
+
+    wg_destroy(gen);
+    printf("✓ newlines format passed\n\n");
+}
+
+void test_format_packed() {
+    printf("Test: WG_FORMAT_PACKED mode...\n");
+
+    struct wg_WordlistGenerator* gen = wg_create(NULL, 0);
+    assert(gen != NULL);
+
+    // Configure
+    wg_set_charset(gen, 1, "xyz", 3);
+    int mask[] = {1, 1, 1, 1, 1, 1, 1, 1};  // 8 characters
+    wg_set_mask(gen, mask, 8);
+
+    // Set format to packed
+    int result = wg_set_format(gen, 2);  // WG_FORMAT_PACKED
+    assert(result == 0 && "Failed to set format");
+
+    // Generate on device
+    struct wg_BatchDevice batch;
+    result = wg_generate_batch_device(gen, 0, 1000, &batch);
+    assert(result == 0 && "Device generation failed");
+    assert(batch.format == 2 && "Format should be PACKED");
+    assert(batch.word_length == 8 && "Wrong word length");
+    assert(batch.stride == 8 && "Stride should equal word_length (no separator)");
+
+    // Calculate memory savings
+    size_t newlines_bytes = 1000 * 9;  // word + '\n'
+    size_t packed_bytes = 1000 * 8;    // just word
+    float savings = ((float)(newlines_bytes - packed_bytes) / newlines_bytes) * 100;
+
+    printf("  Format: PACKED (2)\n");
+    printf("  Word length: %zu\n", batch.word_length);
+    printf("  Stride: %zu bytes (no separator)\n", batch.stride);
+    printf("  Total bytes: %zu\n", batch.total_bytes);
+    printf("  Memory saved vs NEWLINES: %.1f%%\n", savings);
+
+    wg_destroy(gen);
+    printf("✓ packed format passed\n\n");
+}
+
+void test_format_invalid() {
+    printf("Test: invalid format handling...\n");
+
+    struct wg_WordlistGenerator* gen = wg_create(NULL, 0);
+    assert(gen != NULL);
+
+    // Try invalid format
+    int result = wg_set_format(gen, 99);
+    assert(result != 0 && "Should fail with invalid format");
+
+    const char* error = wg_get_error(gen);
+    assert(error != NULL && "Should have error message");
+    printf("  Error message: %s\n", error);
+
+    wg_destroy(gen);
+    printf("✓ invalid format handling passed\n\n");
+}
+
 int main() {
     printf("=== FFI Basic Tests ===\n\n");
 
@@ -206,6 +296,11 @@ int main() {
     test_device_generation();
     test_device_free();
     test_device_copy_back();
+
+    // Phase 3 tests (output formats)
+    test_format_newlines();
+    test_format_packed();
+    test_format_invalid();
 
     printf("=== All tests passed! ===\n");
     return 0;

@@ -126,6 +126,18 @@ int32_t wg_set_charset(struct wg_WordlistGenerator *gen,
 int32_t wg_set_mask(struct wg_WordlistGenerator *gen, const int32_t *mask, int32_t length);
 
 /**
+ * Set output format mode
+ *
+ * # Arguments
+ * * `gen` - Generator handle
+ * * `format` - Output format (WG_FORMAT_*)
+ *
+ * # Returns
+ * WG_SUCCESS or error code
+ */
+int32_t wg_set_format(struct wg_WordlistGenerator *gen, int32_t format);
+
+/**
  * Get total keyspace size
  *
  * # Returns

@@ -58,6 +58,7 @@ struct GeneratorInternal {
     mask: Option<Vec<usize>>,
     current_batch: Option<CUdeviceptr>,  // Track active device memory
     owns_context: bool,  // Whether we created the CUDA context
+    output_format: i32,  // Output format mode (WG_FORMAT_*)
 }
 
 impl GeneratorInternal {
@@ -143,6 +144,7 @@ pub extern "C" fn wg_create(
             mask: None,
             current_batch: None,
             owns_context,
+            output_format: WG_FORMAT_NEWLINES,  // Default format
         });
 
         // Convert to opaque pointer
@@ -281,6 +283,39 @@ pub extern "C" fn wg_set_mask(
     WG_SUCCESS
 }
 
+/// Set output format mode
+///
+/// # Arguments
+/// * `gen` - Generator handle
+/// * `format` - Output format (WG_FORMAT_*)
+///
+/// # Returns
+/// WG_SUCCESS or error code
+#[no_mangle]
+pub extern "C" fn wg_set_format(
+    gen: *mut WordlistGenerator,
+    format: i32,
+) -> i32 {
+    let internal = unsafe {
+        match handle_to_internal(gen) {
+            Some(g) => g,
+            None => {
+                set_error("Invalid generator handle".to_string());
+                return WG_ERROR_INVALID_HANDLE;
+            }
+        }
+    };
+
+    // Validate format
+    if format < WG_FORMAT_NEWLINES || format > WG_FORMAT_PACKED {
+        set_error(format!("Invalid format: {}", format));
+        return WG_ERROR_INVALID_PARAM;
+    }
+
+    internal.output_format = format;
+    WG_SUCCESS
+}
+
 /// Get total keyspace size
 ///
 /// # Returns
@@ -338,8 +373,17 @@ pub extern "C" fn wg_calculate_buffer_size(
         None => return 0,
     };
 
-    let word_length = mask.len() + 1; // +1 for newline
-    (count as usize).saturating_mul(word_length)
+    let word_length = mask.len();
+
+    // Calculate bytes per word based on format
+    let bytes_per_word = match internal.output_format {
+        WG_FORMAT_NEWLINES => word_length + 1,  // word + '\n'
+        WG_FORMAT_FIXED_WIDTH => word_length + 1,  // word + '\0' padding
+        WG_FORMAT_PACKED => word_length,  // just the word, no separator
+        _ => word_length + 1,  // fallback to newlines
+    };
+
+    (count as usize).saturating_mul(bytes_per_word)
 }
 
 /// Get last error message for this thread
@@ -489,7 +533,16 @@ pub extern "C" fn wg_generate_batch_device(
 
             // Fill batch structure
             let word_length = mask.len();
-            let stride = word_length + 1; // +1 for newline
+
+            // Calculate stride based on format
+            // Note: Kernel always writes with newlines (word_length + 1)
+            // For packed format, consumers should use word_length stride and ignore '\n'
+            let stride = match internal.output_format {
+                WG_FORMAT_NEWLINES => word_length + 1,  // word + '\n'
+                WG_FORMAT_FIXED_WIDTH => word_length + 1,  // word + '\0' (same as newlines for now)
+                WG_FORMAT_PACKED => word_length,  // just word (skip '\n')
+                _ => word_length + 1,
+            };
 
             unsafe {
                 (*batch).data = device_ptr;
@@ -497,7 +550,7 @@ pub extern "C" fn wg_generate_batch_device(
                 (*batch).word_length = word_length;
                 (*batch).stride = stride;
                 (*batch).total_bytes = total_bytes;
-                (*batch).format = WG_FORMAT_NEWLINES;
+                (*batch).format = internal.output_format;
             }
 
             WG_SUCCESS

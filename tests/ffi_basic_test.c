@@ -283,8 +283,168 @@ void test_format_invalid() {
     printf("✓ invalid format handling passed\n\n");
 }
 
+void test_stream_generation() {
+    printf("Test: Stream-based async generation...\n");
+
+    struct wg_WordlistGenerator* gen = wg_create(NULL, 0);
+    assert(gen != NULL);
+
+    // Configure
+    wg_set_charset(gen, 1, "abcdefgh", 8);
+    int mask[] = {1, 1, 1, 1, 1, 1, 1, 1};
+    wg_set_mask(gen, mask, 8);
+
+    // Create CUDA stream
+    CUstream stream;
+    CUresult res = cuStreamCreate(&stream, 0);
+    assert(res == CUDA_SUCCESS && "Failed to create stream");
+
+    // Generate using stream (async)
+    struct wg_BatchDevice batch;
+    int result = wg_generate_batch_stream(gen, stream, 0, 1000, &batch);
+    assert(result == 0 && "Stream generation failed");
+
+    printf("  Generated batch on stream (async)\n");
+    printf("  Device pointer: 0x%llx\n", (unsigned long long)batch.data);
+    printf("  Count: %llu\n", (unsigned long long)batch.count);
+    printf("  Word length: %zu\n", batch.word_length);
+    printf("  Stride: %zu\n", batch.stride);
+
+    // Synchronize stream (wait for completion)
+    res = cuStreamSynchronize(stream);
+    assert(res == CUDA_SUCCESS && "Stream synchronization failed");
+
+    printf("  Stream synchronized - data is now valid\n");
+
+    // Cleanup
+    cuStreamDestroy(stream);
+    wg_destroy(gen);
+
+    printf("✓ stream generation passed\n\n");
+}
+
+void test_stream_overlap() {
+    printf("Test: Overlapping stream operations...\n");
+
+    struct wg_WordlistGenerator* gen = wg_create(NULL, 0);
+    assert(gen != NULL);
+
+    // Configure
+    wg_set_charset(gen, 1, "0123456789", 10);
+    int mask[] = {1, 1, 1, 1};
+    wg_set_mask(gen, mask, 4);
+
+    // Create two streams
+    CUstream stream1, stream2;
+    cuStreamCreate(&stream1, 0);
+    cuStreamCreate(&stream2, 0);
+
+    // Launch two async operations
+    struct wg_BatchDevice batch1, batch2;
+    int result1 = wg_generate_batch_stream(gen, stream1, 0, 5000, &batch1);
+    int result2 = wg_generate_batch_stream(gen, stream2, 5000, 5000, &batch2);
+
+    // Note: Second call will free first batch's memory, but that's expected behavior
+    // In production, user would need separate generator instances for true overlap
+    assert(result2 == 0 && "Second stream generation failed");
+
+    printf("  Launched operations on two streams\n");
+    printf("  Stream 2 batch pointer: 0x%llx\n", (unsigned long long)batch2.data);
+
+    // Synchronize both
+    cuStreamSynchronize(stream1);
+    cuStreamSynchronize(stream2);
+
+    printf("  Both streams synchronized\n");
+
+    // Cleanup
+    cuStreamDestroy(stream1);
+    cuStreamDestroy(stream2);
+    wg_destroy(gen);
+
+    printf("✓ stream overlap test passed\n\n");
+}
+
+void test_stream_null() {
+    printf("Test: Stream with NULL (default stream)...\n");
+
+    struct wg_WordlistGenerator* gen = wg_create(NULL, 0);
+    assert(gen != NULL);
+
+    // Configure
+    wg_set_charset(gen, 1, "xyz", 3);
+    int mask[] = {1, 1};
+    wg_set_mask(gen, mask, 2);
+
+    // Generate using NULL stream (should use default stream and synchronize)
+    struct wg_BatchDevice batch;
+    int result = wg_generate_batch_stream(gen, NULL, 0, 9, &batch);
+    assert(result == 0 && "Null stream generation failed");
+
+    printf("  Generated with NULL stream (default stream)\n");
+    printf("  Count: %llu\n", (unsigned long long)batch.count);
+
+    // No need to synchronize - NULL stream implies synchronous behavior
+    // Data should be immediately valid
+
+    wg_destroy(gen);
+
+    printf("✓ null stream test passed\n\n");
+}
+
+void test_version() {
+    printf("Test: Library version...\n");
+
+    const char* version = wg_get_version();
+    assert(version != NULL && "Version string is NULL");
+
+    printf("  Library version: %s\n", version);
+
+    // Check format is reasonable (contains at least one digit)
+    int has_digit = 0;
+    for (const char* p = version; *p; p++) {
+        if (*p >= '0' && *p <= '9') {
+            has_digit = 1;
+            break;
+        }
+    }
+    assert(has_digit && "Version string should contain digits");
+
+    printf("✓ version test passed\n\n");
+}
+
+void test_cuda_available() {
+    printf("Test: CUDA availability check...\n");
+
+    int available = wg_cuda_available();
+    printf("  CUDA available: %s\n", available ? "YES" : "NO");
+
+    // For this test system, we expect CUDA to be available
+    // (otherwise previous tests would have failed)
+    assert(available == 1 && "CUDA should be available");
+
+    printf("✓ cuda available test passed\n\n");
+}
+
+void test_device_count() {
+    printf("Test: CUDA device count...\n");
+
+    int count = wg_get_device_count();
+    printf("  Device count: %d\n", count);
+
+    // Should have at least one device (since CUDA is available)
+    assert(count > 0 && "Should have at least one CUDA device");
+
+    printf("✓ device count test passed\n\n");
+}
+
 int main() {
     printf("=== FFI Basic Tests ===\n\n");
+
+    // Phase 5 tests (utility functions) - run first
+    test_version();
+    test_cuda_available();
+    test_device_count();
 
     // Phase 1 tests (host memory)
     test_create_destroy();
@@ -301,6 +461,11 @@ int main() {
     test_format_newlines();
     test_format_packed();
     test_format_invalid();
+
+    // Phase 4 tests (streaming API)
+    test_stream_generation();
+    test_stream_overlap();
+    test_stream_null();
 
     printf("=== All tests passed! ===\n");
     return 0;

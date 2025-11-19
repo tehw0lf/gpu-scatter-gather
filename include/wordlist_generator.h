@@ -205,4 +205,106 @@ int32_t wg_generate_batch_device(struct wg_WordlistGenerator *gen,
  */
 void wg_free_batch_device(struct wg_WordlistGenerator *gen, struct wg_BatchDevice *batch);
 
+/**
+ * Generate batch using CUDA stream (async)
+ *
+ * Allows overlapping generation with other GPU operations.
+ * Kernel launch returns immediately; use cuStreamSynchronize()
+ * to wait for completion.
+ *
+ * # Arguments
+ * * `gen` - Generator handle
+ * * `stream` - CUDA stream for async execution (null for default stream)
+ * * `start_idx` - Starting index in keyspace
+ * * `count` - Number of candidates to generate
+ * * `batch` - [out] Batch result info
+ *
+ * # Returns
+ * WG_SUCCESS or error code
+ *
+ * # Safety
+ * Caller must synchronize stream before using batch.data.
+ * Device pointer lifetime same as wg_generate_batch_device().
+ *
+ * # Example
+ * ```c
+ * CUstream stream;
+ * cuStreamCreate(&stream, 0);
+ *
+ * wg_batch_device_t batch;
+ * wg_generate_batch_stream(gen, stream, 0, 100000000, &batch);
+ *
+ * // Do other work...
+ *
+ * cuStreamSynchronize(stream);  // Wait for generation
+ * // Now batch.data is valid
+ * ```
+ */
+int32_t wg_generate_batch_stream(struct wg_WordlistGenerator *gen,
+                                 CUstream stream,
+                                 uint64_t start_idx,
+                                 uint64_t count,
+                                 struct wg_BatchDevice *batch);
+
+/**
+ * Get library version string
+ *
+ * Returns a static string with the library version.
+ * This function never fails and always returns a valid pointer.
+ *
+ * # Returns
+ * Pointer to static version string (e.g., "0.1.0")
+ *
+ * # Example
+ * ```c
+ * const char* version = wg_get_version();
+ * printf("Library version: %s\n", version);
+ * ```
+ */
+const char *wg_get_version(void);
+
+/**
+ * Check if CUDA is available
+ *
+ * Attempts to initialize CUDA and check for devices.
+ * This function can be called before creating a generator
+ * to verify CUDA is available.
+ *
+ * # Returns
+ * 1 if CUDA is available and working, 0 otherwise
+ *
+ * # Example
+ * ```c
+ * if (!wg_cuda_available()) {
+ *     fprintf(stderr, "CUDA not available\n");
+ *     return -1;
+ * }
+ * // Safe to create generator
+ * ```
+ */
+int32_t wg_cuda_available(void);
+
+/**
+ * Get number of CUDA devices
+ *
+ * Returns the count of CUDA-capable devices in the system.
+ * Returns -1 if CUDA is not available or on error.
+ *
+ * # Returns
+ * Number of CUDA devices (>= 0) or -1 on error
+ *
+ * # Example
+ * ```c
+ * int count = wg_get_device_count();
+ * if (count < 0) {
+ *     fprintf(stderr, "CUDA error\n");
+ * } else if (count == 0) {
+ *     fprintf(stderr, "No CUDA devices found\n");
+ * } else {
+ *     printf("Found %d CUDA device(s)\n", count);
+ * }
+ * ```
+ */
+int32_t wg_get_device_count(void);
+
 #endif /* WORDLIST_GENERATOR_H */

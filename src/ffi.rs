@@ -596,3 +596,209 @@ pub extern "C" fn wg_free_batch_device(
         (*batch).total_bytes = 0;
     }
 }
+
+/// Generate batch using CUDA stream (async)
+///
+/// Allows overlapping generation with other GPU operations.
+/// Kernel launch returns immediately; use cuStreamSynchronize()
+/// to wait for completion.
+///
+/// # Arguments
+/// * `gen` - Generator handle
+/// * `stream` - CUDA stream for async execution (null for default stream)
+/// * `start_idx` - Starting index in keyspace
+/// * `count` - Number of candidates to generate
+/// * `batch` - [out] Batch result info
+///
+/// # Returns
+/// WG_SUCCESS or error code
+///
+/// # Safety
+/// Caller must synchronize stream before using batch.data.
+/// Device pointer lifetime same as wg_generate_batch_device().
+///
+/// # Example
+/// ```c
+/// CUstream stream;
+/// cuStreamCreate(&stream, 0);
+///
+/// wg_batch_device_t batch;
+/// wg_generate_batch_stream(gen, stream, 0, 100000000, &batch);
+///
+/// // Do other work...
+///
+/// cuStreamSynchronize(stream);  // Wait for generation
+/// // Now batch.data is valid
+/// ```
+#[no_mangle]
+pub extern "C" fn wg_generate_batch_stream(
+    gen: *mut WordlistGenerator,
+    stream: CUstream,
+    start_idx: u64,
+    count: u64,
+    batch: *mut BatchDevice,
+) -> i32 {
+    // Validate inputs
+    if batch.is_null() {
+        set_error("Batch pointer is null".to_string());
+        return WG_ERROR_INVALID_PARAM;
+    }
+
+    let internal = unsafe {
+        match handle_to_internal(gen) {
+            Some(g) => g,
+            None => {
+                set_error("Invalid generator handle".to_string());
+                return WG_ERROR_INVALID_HANDLE;
+            }
+        }
+    };
+
+    // Check if configured
+    if internal.mask.is_none() {
+        set_error("Mask not configured (call wg_set_mask first)".to_string());
+        return WG_ERROR_NOT_CONFIGURED;
+    }
+
+    if internal.charsets.is_empty() {
+        set_error("No charsets configured (call wg_set_charset first)".to_string());
+        return WG_ERROR_NOT_CONFIGURED;
+    }
+
+    // Free previous batch (if any)
+    internal.free_current_batch();
+
+    // Generate on device using stream
+    let mask = internal.mask.as_ref().unwrap();
+    let word_length = mask.len();
+
+    match internal
+        .gpu
+        .generate_batch_device_stream(&internal.charsets, mask, start_idx, count, stream)
+    {
+        Ok((device_ptr, buffer_size)) => {
+            // Calculate stride based on output format
+            let stride = match internal.output_format {
+                WG_FORMAT_PACKED => word_length,        // No separator
+                WG_FORMAT_NEWLINES => word_length + 1,  // word + newline
+                WG_FORMAT_FIXED_WIDTH => word_length + 1, // word + null/padding
+                _ => word_length + 1,
+            };
+
+            // Store device pointer for auto-cleanup
+            internal.current_batch = Some(device_ptr);
+
+            // Fill batch info
+            unsafe {
+                (*batch).data = device_ptr;
+                (*batch).count = count;
+                (*batch).word_length = word_length;
+                (*batch).stride = stride;
+                (*batch).total_bytes = buffer_size;
+                (*batch).format = internal.output_format;
+            }
+
+            WG_SUCCESS
+        }
+        Err(e) => {
+            set_error(format!("GPU generation failed: {}", e));
+            WG_ERROR_CUDA
+        }
+    }
+}
+
+/// Get library version string
+///
+/// Returns a static string with the library version.
+/// This function never fails and always returns a valid pointer.
+///
+/// # Returns
+/// Pointer to static version string (e.g., "0.1.0")
+///
+/// # Example
+/// ```c
+/// const char* version = wg_get_version();
+/// printf("Library version: %s\n", version);
+/// ```
+#[no_mangle]
+pub extern "C" fn wg_get_version() -> *const c_char {
+    // Static version string from Cargo.toml
+    const VERSION: &[u8] = b"0.1.0\0";
+    VERSION.as_ptr() as *const c_char
+}
+
+/// Check if CUDA is available
+///
+/// Attempts to initialize CUDA and check for devices.
+/// This function can be called before creating a generator
+/// to verify CUDA is available.
+///
+/// # Returns
+/// 1 if CUDA is available and working, 0 otherwise
+///
+/// # Example
+/// ```c
+/// if (!wg_cuda_available()) {
+///     fprintf(stderr, "CUDA not available\n");
+///     return -1;
+/// }
+/// // Safe to create generator
+/// ```
+#[no_mangle]
+pub extern "C" fn wg_cuda_available() -> i32 {
+    unsafe {
+        // Try to initialize CUDA
+        if cuInit(0) != CUresult::CUDA_SUCCESS {
+            return 0;
+        }
+
+        // Check if at least one device exists
+        let mut device_count = 0;
+        if cuDeviceGetCount(&mut device_count) != CUresult::CUDA_SUCCESS {
+            return 0;
+        }
+
+        if device_count > 0 {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+/// Get number of CUDA devices
+///
+/// Returns the count of CUDA-capable devices in the system.
+/// Returns -1 if CUDA is not available or on error.
+///
+/// # Returns
+/// Number of CUDA devices (>= 0) or -1 on error
+///
+/// # Example
+/// ```c
+/// int count = wg_get_device_count();
+/// if (count < 0) {
+///     fprintf(stderr, "CUDA error\n");
+/// } else if (count == 0) {
+///     fprintf(stderr, "No CUDA devices found\n");
+/// } else {
+///     printf("Found %d CUDA device(s)\n", count);
+/// }
+/// ```
+#[no_mangle]
+pub extern "C" fn wg_get_device_count() -> i32 {
+    unsafe {
+        // Initialize CUDA if needed
+        if cuInit(0) != CUresult::CUDA_SUCCESS {
+            return -1;
+        }
+
+        // Get device count
+        let mut device_count = 0;
+        if cuDeviceGetCount(&mut device_count) != CUresult::CUDA_SUCCESS {
+            return -1;
+        }
+
+        device_count
+    }
+}

@@ -1,2 +1,17 @@
 /target
 /tools
+
+# Compiled test binaries
+test_ffi
+
+# Temporary session files (regenerate each session)
+READY_FOR_COMMIT.md
+COMMIT_MESSAGE.md
+DOC_CLEANUP_COMMIT.md
+NEXT_SESSION_PROMPT.md
+*_PROMPT.md
+
+# Build artifacts
+*.o
+*.so
+*.a

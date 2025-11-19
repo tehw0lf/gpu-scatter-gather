@@ -46,6 +46,8 @@ pub mod gpu;
 
 pub mod bindings;
 
+pub mod ffi;
+
 // Re-exports for convenience
 pub use charset::Charset;
 pub use keyspace::{calculate_keyspace, index_to_word};

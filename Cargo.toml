@@ -13,6 +13,7 @@ categories = ["command-line-utilities", "algorithms"]
 [lib]
 name = "gpu_scatter_gather"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]  # cdylib for C library, rlib for Rust
 
 [[bin]]
 name = "gpu-scatter-gather"
@@ -57,6 +58,7 @@ tempfile = "3.12"
 # Build script for CUDA kernel compilation
 cc = "1.1"
 which = "6.0"
+cbindgen = "0.26"
 
 [features]
 default = []

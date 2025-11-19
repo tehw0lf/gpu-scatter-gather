@@ -1,0 +1,17 @@
+language = "C"
+header = "/* libwordlist_generator - Auto-generated C API */"
+include_guard = "WORDLIST_GENERATOR_H"
+autogen_warning = "/* WARNING: Auto-generated from src/ffi.rs - DO NOT EDIT */"
+
+sys_includes = ["stddef.h", "stdint.h", "cuda.h"]
+tab_width = 4
+
+documentation = true
+documentation_style = "doxy"
+
+[parse]
+parse_deps = false
+include = ["src/ffi.rs"]
+
+[export]
+prefix = "wg_"

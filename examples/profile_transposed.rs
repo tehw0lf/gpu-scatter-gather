@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     println!("Generating {} words for profiling...", batch_size);
 
     let start = std::time::Instant::now();
-    let _output = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size)?;
+    let _output = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
     let elapsed = start.elapsed();
 
     let throughput = batch_size as f64 / elapsed.as_secs_f64();

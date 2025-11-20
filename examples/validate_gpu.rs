@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     charsets.insert(0, charset1.as_bytes().to_vec());
     charsets.insert(1, charset2.as_bytes().to_vec());
 
-    let gpu_output = gpu.generate_batch(&charsets, &[0, 1], 0, keyspace as u64)?;
+    let gpu_output = gpu.generate_batch(&charsets, &[0, 1], 0, keyspace as u64, 0)?;  // format=0 (newlines)
     println!("✅ GPU generated {} bytes", gpu_output.len());
     println!();
 

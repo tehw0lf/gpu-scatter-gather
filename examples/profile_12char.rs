@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         check_cuda(cuEventCreate(&mut end_event, 0))?;
 
         check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
-        let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size)?;
+        let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
         check_cuda(cuEventRecord(end_event, ptr::null_mut()))?;
         check_cuda(cuEventSynchronize(end_event))?;
 

@@ -34,7 +34,7 @@ fn main() -> Result<()> {
 
     // Warmup
     println!("Warming up GPU...");
-    let _ = gpu.generate_batch(&charsets, &mask, 0, 1_000_000)?;
+    let _ = gpu.generate_batch(&charsets, &mask, 0, 1_000_000, 0)?;  // format=0 (newlines)
     println!("Warmup complete.\n");
 
     println!("{}", "=".repeat(80));
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
     println!("Expected coalescing: 7.69% (baseline)\n");
 
     let start = Instant::now();
-    let output_original = gpu.generate_batch(&charsets, &mask, 0, batch_size)?;
+    let output_original = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
     let duration_original = start.elapsed();
 
     let throughput_original = batch_size as f64 / duration_original.as_secs_f64();
@@ -71,7 +71,7 @@ fn main() -> Result<()> {
     println!("Expected coalescing: 7.69% (same as baseline - writes still uncoalesced)\n");
 
     let start = Instant::now();
-    let output_transposed = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size)?;
+    let output_transposed = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
     let duration_transposed = start.elapsed();
 
     let throughput_transposed = batch_size as f64 / duration_transposed.as_secs_f64();
@@ -99,7 +99,7 @@ fn main() -> Result<()> {
     println!("CPU transpose: AVX2 SIMD\n");
 
     let start = Instant::now();
-    let output_hybrid = gpu.generate_batch_hybrid(&charsets, &mask, 0, batch_size)?;
+    let output_hybrid = gpu.generate_batch_hybrid(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
     let duration_hybrid = start.elapsed();
 
     let throughput_hybrid = batch_size as f64 / duration_hybrid.as_secs_f64();

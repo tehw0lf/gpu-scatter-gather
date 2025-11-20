@@ -18,6 +18,7 @@ use std::ptr;
 fn main() -> Result<()> {
     println!("🚀 GPU Scatter-Gather - REALISTIC Password Length Benchmark");
     println!("{}", "=".repeat(70));
+    println!("Output Format: PACKED (no separators - optimal bandwidth)");
     println!();
 
     // Initialize GPU
@@ -84,7 +85,7 @@ fn main() -> Result<()> {
                 check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
 
                 // Generate batch (includes kernel + memory I/O)
-                let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
+                let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 2)?;  // format=2 (PACKED)
 
                 // Record end
                 check_cuda(cuEventRecord(end_event, ptr::null_mut()))?;
@@ -96,7 +97,7 @@ fn main() -> Result<()> {
 
                 let elapsed_secs = elapsed_ms / 1000.0;
                 let words_per_second = batch_size as f64 / elapsed_secs as f64;
-                let mb_per_second = (batch_size as f64 * (word_length + 1) as f64) / elapsed_secs as f64 / 1e6;
+                let mb_per_second = (batch_size as f64 * word_length as f64) / elapsed_secs as f64 / 1e6;  // PACKED format has no separator
 
                 println!(
                     "   Batch: {:>12} words | Time: {:>7.4} s | {:>7.2} M words/s | {:>8.2} MB/s",

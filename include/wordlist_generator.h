@@ -13,6 +13,9 @@
 #include <stdint.h>
 #include <cuda.h>
 
+/* Type alias for CUDA stream type */
+typedef CUstream wg_CUstream;
+
 #define wg_WG_SUCCESS 0
 
 #define wg_WG_ERROR_INVALID_HANDLE -1
@@ -307,4 +310,4 @@ int32_t wg_cuda_available(void);
  */
 int32_t wg_get_device_count(void);
 
-#endif /* WORDLIST_GENERATOR_H */
+#endif  /* WORDLIST_GENERATOR_H */

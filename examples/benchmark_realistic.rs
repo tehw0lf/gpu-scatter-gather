@@ -84,7 +84,7 @@ fn main() -> Result<()> {
                 check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
 
                 // Generate batch (includes kernel + memory I/O)
-                let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size)?;
+                let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
 
                 // Record end
                 check_cuda(cuEventRecord(end_event, ptr::null_mut()))?;

@@ -109,7 +109,7 @@ unsafe fn run_single_benchmark(
     check_cuda(cuEventCreate(&mut end_event, 0))?;
 
     // Warm GPU (single small batch)
-    let _ = gpu.generate_batch(&charsets, &pattern.mask, 0, 1000)?;
+    let _ = gpu.generate_batch(&charsets, &pattern.mask, 0, 1000, 0)?;  // format=0 (newlines)
 
     // Record start time
     check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
@@ -123,7 +123,7 @@ unsafe fn run_single_benchmark(
         let remaining = words_to_generate - total_words;
         let batch = batch_size.min(remaining);
 
-        let _output = gpu.generate_batch(&charsets, &pattern.mask, current_index, batch)?;
+        let _output = gpu.generate_batch(&charsets, &pattern.mask, current_index, batch, 0)?;  // format=0 (newlines)
 
         total_words += batch;
         current_index += batch;

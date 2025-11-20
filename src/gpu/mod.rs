@@ -123,8 +123,9 @@ impl GpuContext {
         mask: &[usize],
         start_idx: u64,
         batch_size: u64,
+        output_format: i32,
     ) -> Result<Vec<u8>> {
-        self.generate_batch_internal(charsets, mask, start_idx, batch_size, false, false)
+        self.generate_batch_internal(charsets, mask, start_idx, batch_size, false, false, output_format)
     }
 
     /// Generate words using GPU with transposed writes (fully coalesced)
@@ -134,8 +135,9 @@ impl GpuContext {
         mask: &[usize],
         start_idx: u64,
         batch_size: u64,
+        output_format: i32,
     ) -> Result<Vec<u8>> {
-        self.generate_batch_internal(charsets, mask, start_idx, batch_size, true, false)
+        self.generate_batch_internal(charsets, mask, start_idx, batch_size, true, false, output_format)
     }
 
     /// Generate batch on device with optional stream (async)
@@ -149,6 +151,7 @@ impl GpuContext {
     /// * `start_idx` - Starting index in keyspace
     /// * `batch_size` - Number of words to generate
     /// * `stream` - Optional CUDA stream (null for default stream)
+    /// * `output_format` - Output format (0=newlines, 1=fixed-width, 2=packed)
     ///
     /// # Returns
     /// Tuple of (device_pointer, output_size)
@@ -159,6 +162,7 @@ impl GpuContext {
         start_idx: u64,
         batch_size: u64,
         stream: CUstream,
+        output_format: i32,
     ) -> Result<(CUdeviceptr, usize)> {
         unsafe {
             // Prepare charset data
@@ -188,7 +192,14 @@ impl GpuContext {
             let mut d_mask_pattern = 0u64;
             let mut d_output = 0u64;
 
-            let output_size = batch_size as usize * (word_length as usize + 1); // +1 for newline
+            // Calculate output size based on format
+            let bytes_per_word = match output_format {
+                0 => word_length as usize + 1,  // WG_FORMAT_NEWLINES
+                1 => word_length as usize + 1,  // WG_FORMAT_FIXED_WIDTH (pad with \0)
+                2 => word_length as usize,      // WG_FORMAT_PACKED (no separator)
+                _ => word_length as usize + 1,  // fallback
+            };
+            let output_size = batch_size as usize * bytes_per_word;
 
             check_cuda(cuMemAlloc_v2(&mut d_charset_data, charset_data.len()))?;
             check_cuda(cuMemAlloc_v2(
@@ -267,6 +278,7 @@ impl GpuContext {
                 &word_length as *const _ as *mut _,
                 &d_output as *const _ as *mut _,
                 &batch_size as *const _ as *mut _,
+                &output_format as *const _ as *mut _,
             ];
 
             check_cuda(cuLaunchKernel(
@@ -315,6 +327,7 @@ impl GpuContext {
         mask: &[usize],
         start_idx: u64,
         batch_size: u64,
+        output_format: i32,
     ) -> Result<Vec<u8>> {
         // Generate column-major output on GPU
         let column_major = self.generate_batch_internal(
@@ -324,6 +337,7 @@ impl GpuContext {
             batch_size,
             false, // don't use transposed kernel
             true,  // use columnmajor kernel
+            output_format,
         )?;
 
         // Transpose to row-major on CPU using SIMD
@@ -343,6 +357,7 @@ impl GpuContext {
         mask: &[usize],
         start_idx: u64,
         batch_size: u64,
+        output_format: i32,
     ) -> Result<(CUdeviceptr, usize)> {
         unsafe {
             // Prepare charset data
@@ -372,7 +387,14 @@ impl GpuContext {
             let mut d_mask_pattern = 0u64;
             let mut d_output = 0u64;
 
-            let output_size = batch_size as usize * (word_length as usize + 1); // +1 for newline
+            // Calculate output size based on format
+            let bytes_per_word = match output_format {
+                0 => word_length as usize + 1,  // WG_FORMAT_NEWLINES
+                1 => word_length as usize + 1,  // WG_FORMAT_FIXED_WIDTH (pad with \0)
+                2 => word_length as usize,      // WG_FORMAT_PACKED (no separator)
+                _ => word_length as usize + 1,  // fallback
+            };
+            let output_size = batch_size as usize * bytes_per_word;
 
             check_cuda(cuMemAlloc_v2(&mut d_charset_data, charset_data.len()))?;
             check_cuda(cuMemAlloc_v2(
@@ -424,6 +446,7 @@ impl GpuContext {
                 &word_length as *const _ as *mut _,
                 &d_output as *const _ as *mut _,
                 &batch_size as *const _ as *mut _,
+                &output_format as *const _ as *mut _,
             ];
 
             check_cuda(cuLaunchKernel(
@@ -463,6 +486,7 @@ impl GpuContext {
         batch_size: u64,
         use_transposed: bool,
         use_columnmajor: bool,
+        output_format: i32,
     ) -> Result<Vec<u8>> {
         unsafe {
             // Prepare charset data
@@ -492,7 +516,14 @@ impl GpuContext {
             let mut d_mask_pattern = 0u64;
             let mut d_output = 0u64;
 
-            let output_size = batch_size as usize * (word_length as usize + 1); // +1 for newline
+            // Calculate output size based on format
+            let bytes_per_word = match output_format {
+                0 => word_length as usize + 1,  // WG_FORMAT_NEWLINES
+                1 => word_length as usize + 1,  // WG_FORMAT_FIXED_WIDTH (pad with \0)
+                2 => word_length as usize,      // WG_FORMAT_PACKED (no separator)
+                _ => word_length as usize + 1,  // fallback
+            };
+            let output_size = batch_size as usize * bytes_per_word;
 
             check_cuda(cuMemAlloc_v2(&mut d_charset_data, charset_data.len()))?;
             check_cuda(cuMemAlloc_v2(
@@ -544,6 +575,7 @@ impl GpuContext {
                 &word_length as *const _ as *mut _,
                 &d_output as *const _ as *mut _,
                 &batch_size as *const _ as *mut _,
+                &output_format as *const _ as *mut _,
             ];
 
             let kernel_to_use = if use_columnmajor {

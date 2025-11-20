@@ -451,6 +451,7 @@ pub extern "C" fn wg_generate_batch_host(
         mask,
         start_idx,
         count,
+        internal.output_format,
     );
 
     match result {
@@ -524,6 +525,7 @@ pub extern "C" fn wg_generate_batch_device(
         &mask,
         start_idx,
         count,
+        internal.output_format,
     );
 
     match result {
@@ -674,7 +676,7 @@ pub extern "C" fn wg_generate_batch_stream(
 
     match internal
         .gpu
-        .generate_batch_device_stream(&internal.charsets, mask, start_idx, count, stream)
+        .generate_batch_device_stream(&internal.charsets, mask, start_idx, count, stream, internal.output_format)
     {
         Ok((device_ptr, buffer_size)) => {
             // Calculate stride based on output format

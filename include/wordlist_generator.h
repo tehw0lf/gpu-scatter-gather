@@ -307,4 +307,4 @@ int32_t wg_cuda_available(void);
  */
 int32_t wg_get_device_count(void);
 
-#endif /* WORDLIST_GENERATOR_H */
+#endif  /* WORDLIST_GENERATOR_H */

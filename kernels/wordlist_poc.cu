@@ -70,7 +70,8 @@ extern "C" __global__ void generate_words_kernel(
     unsigned long long start_idx,               // Starting combination index
     int word_length,                            // Number of positions
     char* __restrict__ output_buffer,           // Output buffer for words
-    unsigned long long batch_size               // Number of words to generate
+    unsigned long long batch_size,              // Number of words to generate
+    int output_format                           // Output format (0=newlines, 1=fixed-width, 2=packed)
 ) {
     // Shared memory for charset metadata (fast access, ~15 TB/s vs L2 ~2.3 TB/s)
     __shared__ int s_charset_sizes[32];    // Max 32 unique charsets
@@ -126,7 +127,10 @@ extern "C" __global__ void generate_words_kernel(
     if (tid >= batch_size) return;
 
     unsigned long long idx = start_idx + tid;
-    char* word = output_buffer + (tid * (word_length + 1)); // +1 for newline
+
+    // Calculate stride based on output format
+    int stride = (output_format == 2) ? word_length : (word_length + 1);
+    char* word = output_buffer + (tid * stride);
 
     // Convert index to word - now using SHARED MEMORY (no global reads!)
     unsigned long long remaining = idx;
@@ -142,7 +146,13 @@ extern "C" __global__ void generate_words_kernel(
         remaining /= cs_size;
     }
 
-    word[word_length] = '\n';
+    // Write separator based on format
+    if (output_format == 0) {  // WG_FORMAT_NEWLINES
+        word[word_length] = '\n';
+    } else if (output_format == 1) {  // WG_FORMAT_FIXED_WIDTH
+        word[word_length] = '\0';
+    }
+    // else: WG_FORMAT_PACKED - write nothing
 }
 
 /**
@@ -170,7 +180,8 @@ extern "C" __global__ void generate_words_transposed_kernel(
     unsigned long long start_idx,
     int word_length,
     char* __restrict__ output_buffer,
-    unsigned long long batch_size
+    unsigned long long batch_size,
+    int output_format
 ) {
     // Shared memory for charset metadata (same as before)
     __shared__ int s_charset_sizes[32];
@@ -240,7 +251,13 @@ extern "C" __global__ void generate_words_transposed_kernel(
         s_words[warp_id][pos][lane_id] = s_charset_data[cs_offset + char_idx];  // Transposed index!
         remaining /= cs_size;
     }
-    s_words[warp_id][word_length][lane_id] = '\n';  // Transposed index!
+
+    // Write separator based on format
+    if (output_format == 0) {  // WG_FORMAT_NEWLINES
+        s_words[warp_id][word_length][lane_id] = '\n';
+    } else if (output_format == 1) {  // WG_FORMAT_FIXED_WIDTH
+        s_words[warp_id][word_length][lane_id] = '\0';
+    }
 
     __syncthreads();  // Ensure all threads in block have generated their words
 
@@ -252,13 +269,17 @@ extern "C" __global__ void generate_words_transposed_kernel(
     // Calculate base output address for this warp's 32 words
     unsigned long long warp_start_tid = (blockIdx.x * blockDim.x + warp_id * 32);
 
+    // Calculate stride based on output format
+    int stride = (output_format == 2) ? word_length : (word_length + 1);
+    int write_length = stride;  // How many positions to write
+
     // Each position is written by all threads in warp cooperatively
     // For position 0: lane 0 writes word 0's char 0, lane 1 writes word 1's char 0, etc.
     #pragma unroll
-    for (int pos = 0; pos <= word_length; pos++) {
+    for (int pos = 0; pos < write_length; pos++) {
         unsigned long long word_tid = warp_start_tid + lane_id;
         if (word_tid < batch_size) {
-            char* word_ptr = output_buffer + (word_tid * (word_length + 1));
+            char* word_ptr = output_buffer + (word_tid * stride);
             word_ptr[pos] = s_words[warp_id][pos][lane_id];  // All 32 threads write same position!
         }
     }
@@ -296,7 +317,8 @@ extern "C" __global__ void generate_words_columnmajor_kernel(
     unsigned long long start_idx,
     int word_length,
     char* __restrict__ output_buffer,
-    unsigned long long batch_size
+    unsigned long long batch_size,
+    int output_format
 ) {
     // Shared memory for charset metadata (same optimization as production kernel)
     __shared__ int s_charset_sizes[32];
@@ -368,6 +390,11 @@ extern "C" __global__ void generate_words_columnmajor_kernel(
         remaining /= cs_size;
     }
 
-    // Write newline at the end (also column-major)
-    output_buffer[word_length * batch_size + tid] = '\n';
+    // Write separator at the end (also column-major) based on format
+    if (output_format == 0) {  // WG_FORMAT_NEWLINES
+        output_buffer[word_length * batch_size + tid] = '\n';
+    } else if (output_format == 1) {  // WG_FORMAT_FIXED_WIDTH
+        output_buffer[word_length * batch_size + tid] = '\0';
+    }
+    // else: WG_FORMAT_PACKED - write nothing
 }

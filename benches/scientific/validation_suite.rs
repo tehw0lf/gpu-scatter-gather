@@ -138,6 +138,7 @@ fn validate_pattern(gpu: &GpuContext, pattern: &ValidationPattern) -> Result<Val
         &pattern.mask,
         0,
         pattern.sample_size as u64,
+        0,  // format=0 (newlines)
     )?;
 
     // Parse output into words

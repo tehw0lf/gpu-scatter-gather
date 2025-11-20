@@ -15,3 +15,8 @@ NEXT_SESSION_PROMPT.md
 *.o
 *.so
 *.a
+
+# Profiling reports (may contain personal paths)
+*.ncu-rep
+*.nsys-rep
+*.qdrep

@@ -30,7 +30,9 @@ Performance measurement and competitive analysis:
 
 ### 📖 User Guides (`guides/`)
 Integration and usage documentation:
-- **INTEGRATION_GUIDE.md** - How to integrate the library
+- **INTEGRATION_GUIDE.md** - Generic integration patterns for custom tools
+- **HASHCAT_INTEGRATION.md** - Complete hashcat integration guide (3 patterns) ⭐ NEW
+- **JTR_INTEGRATION.md** - John the Ripper integration guide (external mode, plugins) ⭐ NEW
 - **PUBLICATION_GUIDE.md** - Academic publication preparation
 - **ENABLE_PROFILING.md** - GPU profiling setup
 - **NSIGHT_COMPUTE_SETUP.md** - Nsight Compute profiling guide
@@ -57,7 +59,10 @@ Historical documents preserved for reference:
 ### For Users
 Start with:
 1. Main `README.md` (project root)
-2. `guides/INTEGRATION_GUIDE.md` - Integration walkthrough
+2. Tool-specific integration:
+   - `guides/HASHCAT_INTEGRATION.md` - For hashcat users
+   - `guides/JTR_INTEGRATION.md` - For John the Ripper users
+   - `guides/INTEGRATION_GUIDE.md` - For custom tool developers
 3. `api/C_API_SPECIFICATION.md` - API reference
 
 ### For Contributors
@@ -102,16 +107,22 @@ Primary documents:
 
 | Category | Files | Total Size |
 |----------|-------|------------|
-| API | 4 | ~55 KB |
-| Design | 3 | ~62 KB |
-| Validation | 3 | ~31 KB |
-| Benchmarking | 2 | ~44 KB |
-| Guides | 4 | ~57 KB |
+| API | 8 | ~116 KB |
+| Design | 3 | ~68 KB |
+| Validation | 3 | ~36 KB |
+| Benchmarking | 2 | ~48 KB |
+| Guides | 6 | ~112 KB |
 | Development | 4 | ~143 KB |
 | Archive | 12 | ~106 KB |
-| **Total** | **32** | **~498 KB** |
+| **Total** | **38** | **~629 KB** |
 
 ## Recent Changes
+
+**2025-11-20**: v1.0.0 Release Documentation
+- Added **HASHCAT_INTEGRATION.md** - Complete integration guide with 3 patterns
+- Added **JTR_INTEGRATION.md** - John the Ripper integration guide
+- Created **RELEASE_NOTES_v1.0.0.md** - Comprehensive release notes
+- Updated all API phase summaries (PHASE1-5_SUMMARY.md)
 
 **2025-11-19**: Documentation reorganization
 - Created logical subdirectories (api/, design/, validation/, etc.)
@@ -121,4 +132,4 @@ Primary documents:
 
 ---
 
-*Last Updated: November 19, 2025*
+*Last Updated: November 20, 2025*

@@ -1,0 +1,82 @@
+{
+  "medium_6char_lowercase": {
+    "pattern_name": "medium_6char_lowercase",
+    "num_runs": 10,
+    "mean_throughput": 725565271.6765455,
+    "median_throughput": 732352171.2069885,
+    "std_dev": 19985087.981994588,
+    "coefficient_of_variation": 0.0275441628233054,
+    "confidence_interval_95": [
+      711484668.7665806,
+      739645874.5865104
+    ],
+    "min_throughput": 682606418.144229,
+    "max_throughput": 753783691.5162929,
+    "outliers": [
+      682606418.144229
+    ]
+  },
+  "large_8char_lowercase_limited": {
+    "pattern_name": "large_8char_lowercase_limited",
+    "num_runs": 10,
+    "mean_throughput": 553242841.6143228,
+    "median_throughput": 561560322.8478835,
+    "std_dev": 14691496.70937266,
+    "coefficient_of_variation": 0.026555240491687032,
+    "confidence_interval_95": [
+      542891867.352708,
+      563593815.8759376
+    ],
+    "min_throughput": 520889665.8148162,
+    "max_throughput": 569066682.7087158,
+    "outliers": []
+  },
+  "small_4char_lowercase": {
+    "pattern_name": "small_4char_lowercase",
+    "num_runs": 10,
+    "mean_throughput": 560730811.5682776,
+    "median_throughput": 575789888.3226261,
+    "std_dev": 38031888.52159764,
+    "coefficient_of_variation": 0.06782557287199595,
+    "confidence_interval_95": [
+      533935236.7541394,
+      587526386.3824158
+    ],
+    "min_throughput": 486873947.22168934,
+    "max_throughput": 592970152.8815353,
+    "outliers": [
+      486873947.22168934,
+      490014754.4668363
+    ]
+  },
+  "mixed_upper_lower_digits": {
+    "pattern_name": "mixed_upper_lower_digits",
+    "num_runs": 10,
+    "mean_throughput": 553155065.4670919,
+    "median_throughput": 551834219.0218265,
+    "std_dev": 12479060.391010568,
+    "coefficient_of_variation": 0.022559786884484324,
+    "confidence_interval_95": [
+      544362875.299423,
+      561947255.6347609
+    ],
+    "min_throughput": 536904193.8077826,
+    "max_throughput": 570984740.2772483,
+    "outliers": []
+  },
+  "special_chars": {
+    "pattern_name": "special_chars",
+    "num_runs": 10,
+    "mean_throughput": 720428313.6027151,
+    "median_throughput": 718456272.9554405,
+    "std_dev": 10139748.995343342,
+    "coefficient_of_variation": 0.014074612010508756,
+    "confidence_interval_95": [
+      713284298.057786,
+      727572329.1476443
+    ],
+    "min_throughput": 698453776.6093924,
+    "max_throughput": 733925751.635299,
+    "outliers": []
+  }
+}

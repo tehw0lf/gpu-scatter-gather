@@ -2,6 +2,18 @@
 
 This directory contains comprehensive documentation for the GPU Scatter-Gather Wordlist Generator.
 
+## 📄 Technical Whitepaper
+
+**[GPU_Scatter_Gather_Whitepaper_v1.0.0.pdf](GPU_Scatter_Gather_Whitepaper_v1.0.0.pdf)** - Complete technical whitepaper (23 pages)
+- Algorithm design and mathematical proofs
+- Performance evaluation and competitive analysis
+- Formal validation methodology
+- Integration patterns and use cases
+
+**Source:** [WHITEPAPER.md](WHITEPAPER.md) - Markdown source with ASCII diagrams
+
+---
+
 ## Directory Structure
 
 ### 📘 API Documentation (`api/`)
@@ -49,6 +61,7 @@ Historical documents preserved for reference:
 - Phase-specific results and session summaries
 - Temporary planning documents
 - Superseded analysis documents
+- Whitepaper support files (Mermaid diagrams, ASCII diagrams reference)
 - See `archive/README.md` for details
 
 ### 🔄 Session Management

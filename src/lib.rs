@@ -16,6 +16,7 @@
 //! - O(1) random access to any position in the keyspace
 //! - Perfect GPU utilization with coalesced memory access
 //! - 500M-1B+ words/second throughput (3-7x faster than maskprocessor)
+//! - Multi-GPU support for linear scaling (v1.1.0+)
 //!
 //! # Example Usage
 //!
@@ -43,6 +44,7 @@ pub mod mask;
 pub mod transpose;
 
 pub mod gpu;
+pub mod multigpu;
 
 pub mod bindings;
 

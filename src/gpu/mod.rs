@@ -17,19 +17,39 @@ pub struct GpuContext {
     kernel_transposed: CUfunction,
     kernel_columnmajor: CUfunction,
     device: CUdevice,
+    device_id: i32,
     compute_capability: (i32, i32),
 }
 
 impl GpuContext {
-    /// Initialize GPU context and load kernel
+    /// Initialize GPU context and load kernel (uses device 0)
     pub fn new() -> Result<Self> {
+        Self::with_device(0)
+    }
+
+    /// Initialize GPU context for specific device
+    pub fn with_device(device_id: i32) -> Result<Self> {
         unsafe {
             // Initialize CUDA
             check_cuda(cuInit(0)).context("Failed to initialize CUDA")?;
 
+            // Validate device_id
+            let mut device_count = 0;
+            check_cuda(cuDeviceGetCount(&mut device_count))
+                .context("Failed to get device count")?;
+
+            if device_id < 0 || device_id >= device_count {
+                anyhow::bail!(
+                    "Invalid device_id: {} (valid range: 0-{})",
+                    device_id,
+                    device_count - 1
+                );
+            }
+
             // Get device
             let mut device = 0;
-            check_cuda(cuDeviceGet(&mut device, 0)).context("Failed to get CUDA device")?;
+            check_cuda(cuDeviceGet(&mut device, device_id))
+                .with_context(|| format!("Failed to get CUDA device {}", device_id))?;
 
             // Get compute capability
             let mut compute_capability_major = 0;
@@ -89,6 +109,7 @@ impl GpuContext {
                 kernel_transposed,
                 kernel_columnmajor,
                 device,
+                device_id,
                 compute_capability: (compute_capability_major, compute_capability_minor),
             })
         }
@@ -114,6 +135,11 @@ impl GpuContext {
     /// Get compute capability
     pub fn compute_capability(&self) -> (i32, i32) {
         self.compute_capability
+    }
+
+    /// Get device ID
+    pub fn device_id(&self) -> i32 {
+        self.device_id
     }
 
     /// Generate words using GPU (original uncoalesced kernel)

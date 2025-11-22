@@ -804,3 +804,151 @@ pub extern "C" fn wg_get_device_count() -> i32 {
         device_count
     }
 }
+
+/// Get device information
+///
+/// Retrieves detailed information about a specific CUDA device.
+///
+/// # Arguments
+/// * `device_id` - Device index (0 to wg_get_device_count() - 1)
+/// * `name_out` - Buffer for device name (at least 256 bytes)
+/// * `compute_cap_major_out` - Output for major compute capability
+/// * `compute_cap_minor_out` - Output for minor compute capability
+/// * `total_memory_out` - Output for total device memory in bytes
+///
+/// # Returns
+/// WG_SUCCESS or error code
+///
+/// # Example
+/// ```c
+/// int count = wg_get_device_count();
+/// for (int i = 0; i < count; i++) {
+///     char name[256];
+///     int major, minor;
+///     uint64_t memory;
+///
+///     if (wg_get_device_info(i, name, &major, &minor, &memory) == WG_SUCCESS) {
+///         printf("Device %d: %s (sm_%d%d, %lu MB)\n",
+///                i, name, major, minor, memory / (1024*1024));
+///     }
+/// }
+/// ```
+#[no_mangle]
+pub extern "C" fn wg_get_device_info(
+    device_id: i32,
+    name_out: *mut c_char,
+    compute_cap_major_out: *mut i32,
+    compute_cap_minor_out: *mut i32,
+    total_memory_out: *mut u64,
+) -> i32 {
+    unsafe {
+        // Initialize CUDA if needed
+        if cuInit(0) != CUresult::CUDA_SUCCESS {
+            set_error("Failed to initialize CUDA".to_string());
+            return WG_ERROR_CUDA;
+        }
+
+        // Validate device_id
+        let mut device_count = 0;
+        if cuDeviceGetCount(&mut device_count) != CUresult::CUDA_SUCCESS {
+            set_error("Failed to get device count".to_string());
+            return WG_ERROR_CUDA;
+        }
+
+        if device_id < 0 || device_id >= device_count {
+            set_error(format!(
+                "Invalid device_id: {} (valid range: 0-{})",
+                device_id,
+                device_count - 1
+            ));
+            return WG_ERROR_INVALID_PARAM;
+        }
+
+        // Validate output pointers
+        if name_out.is_null() {
+            set_error("name_out pointer is null".to_string());
+            return WG_ERROR_INVALID_PARAM;
+        }
+
+        if compute_cap_major_out.is_null() {
+            set_error("compute_cap_major_out pointer is null".to_string());
+            return WG_ERROR_INVALID_PARAM;
+        }
+
+        if compute_cap_minor_out.is_null() {
+            set_error("compute_cap_minor_out pointer is null".to_string());
+            return WG_ERROR_INVALID_PARAM;
+        }
+
+        if total_memory_out.is_null() {
+            set_error("total_memory_out pointer is null".to_string());
+            return WG_ERROR_INVALID_PARAM;
+        }
+
+        // Get device handle
+        let mut device = 0;
+        if cuDeviceGet(&mut device, device_id) != CUresult::CUDA_SUCCESS {
+            set_error(format!("Failed to get device {}", device_id));
+            return WG_ERROR_CUDA;
+        }
+
+        // Get device name
+        let mut name_buffer = vec![0i8; 256];
+        if cuDeviceGetName(name_buffer.as_mut_ptr(), 256, device) != CUresult::CUDA_SUCCESS {
+            set_error(format!("Failed to get name for device {}", device_id));
+            return WG_ERROR_CUDA;
+        }
+
+        // Copy name to output buffer
+        let name_len = name_buffer.iter().position(|&c| c == 0).unwrap_or(255);
+        std::ptr::copy_nonoverlapping(
+            name_buffer.as_ptr(),
+            name_out,
+            name_len.min(255),
+        );
+        *name_out.add(name_len.min(255)) = 0; // Null terminate
+
+        // Get compute capability
+        let mut major = 0;
+        let mut minor = 0;
+        if cuDeviceGetAttribute(
+            &mut major,
+            CUdevice_attribute::CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+            device,
+        ) != CUresult::CUDA_SUCCESS
+        {
+            set_error(format!(
+                "Failed to get compute capability major for device {}",
+                device_id
+            ));
+            return WG_ERROR_CUDA;
+        }
+
+        if cuDeviceGetAttribute(
+            &mut minor,
+            CUdevice_attribute::CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+            device,
+        ) != CUresult::CUDA_SUCCESS
+        {
+            set_error(format!(
+                "Failed to get compute capability minor for device {}",
+                device_id
+            ));
+            return WG_ERROR_CUDA;
+        }
+
+        *compute_cap_major_out = major;
+        *compute_cap_minor_out = minor;
+
+        // Get total memory
+        let mut total_mem = 0usize;
+        if cuDeviceTotalMem_v2(&mut total_mem, device) != CUresult::CUDA_SUCCESS {
+            set_error(format!("Failed to get total memory for device {}", device_id));
+            return WG_ERROR_CUDA;
+        }
+
+        *total_memory_out = total_mem as u64;
+
+        WG_SUCCESS
+    }
+}

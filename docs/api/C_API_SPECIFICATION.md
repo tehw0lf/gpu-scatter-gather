@@ -14,9 +14,9 @@
 | **Phase 2** | ✅ **COMPLETE** | 3 functions | Device pointer API (zero-copy) |
 | **Phase 3** | ✅ **COMPLETE** | 1 function | Output format modes |
 | **Phase 4** | ✅ **COMPLETE** | 1 function | Streaming API (async) |
-| **Phase 5** | ✅ **COMPLETE** | 3 functions | Utility functions |
+| **Phase 5** | ✅ **COMPLETE** | 4 functions | Utility functions (includes device enumeration) |
 
-**Total Implemented**: 16 functions (ALL PHASES COMPLETE)
+**Total Implemented**: 17 functions (ALL PHASES COMPLETE + Device Enumeration)
 **Test Coverage**: 16/16 tests passing
 **Documentation**: Complete (see docs/api/PHASE*_SUMMARY.md)
 
@@ -485,6 +485,40 @@ int wg_cuda_available(void);
  *   printf("Found %d GPUs\n", num_gpus);
  */
 int wg_get_device_count(void);
+
+/**
+ * Get device information
+ *
+ * Retrieves detailed information about a specific CUDA device.
+ *
+ * @param device_id         Device index (0 to wg_get_device_count() - 1)
+ * @param name_out          [out] Buffer for device name (at least 256 bytes)
+ * @param compute_cap_major_out [out] Major compute capability
+ * @param compute_cap_minor_out [out] Minor compute capability
+ * @param total_memory_out  [out] Total device memory in bytes
+ *
+ * @return WG_SUCCESS or error code
+ *
+ * Example:
+ *   int count = wg_get_device_count();
+ *   for (int i = 0; i < count; i++) {
+ *       char name[256];
+ *       int major, minor;
+ *       uint64_t memory;
+ *
+ *       if (wg_get_device_info(i, name, &major, &minor, &memory) == WG_SUCCESS) {
+ *           printf("Device %d: %s (sm_%d%d, %lu MB)\n",
+ *                  i, name, major, minor, memory / (1024*1024));
+ *       }
+ *   }
+ */
+int wg_get_device_info(
+    int device_id,
+    char* name_out,
+    int* compute_cap_major_out,
+    int* compute_cap_minor_out,
+    uint64_t* total_memory_out
+);
 
 #ifdef __cplusplus
 }

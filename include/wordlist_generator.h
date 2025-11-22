@@ -13,9 +13,6 @@
 #include <stdint.h>
 #include <cuda.h>
 
-/* Type alias for CUDA stream type */
-typedef CUstream wg_CUstream;
-
 #define wg_WG_SUCCESS 0
 
 #define wg_WG_ERROR_INVALID_HANDLE -1
@@ -244,7 +241,7 @@ void wg_free_batch_device(struct wg_WordlistGenerator *gen, struct wg_BatchDevic
  * ```
  */
 int32_t wg_generate_batch_stream(struct wg_WordlistGenerator *gen,
-                                 wg_CUstream stream,
+                                 CUstream stream,
                                  uint64_t start_idx,
                                  uint64_t count,
                                  struct wg_BatchDevice *batch);
@@ -309,5 +306,41 @@ int32_t wg_cuda_available(void);
  * ```
  */
 int32_t wg_get_device_count(void);
+
+/**
+ * Get device information
+ *
+ * Retrieves detailed information about a specific CUDA device.
+ *
+ * # Arguments
+ * * `device_id` - Device index (0 to wg_get_device_count() - 1)
+ * * `name_out` - Buffer for device name (at least 256 bytes)
+ * * `compute_cap_major_out` - Output for major compute capability
+ * * `compute_cap_minor_out` - Output for minor compute capability
+ * * `total_memory_out` - Output for total device memory in bytes
+ *
+ * # Returns
+ * WG_SUCCESS or error code
+ *
+ * # Example
+ * ```c
+ * int count = wg_get_device_count();
+ * for (int i = 0; i < count; i++) {
+ *     char name[256];
+ *     int major, minor;
+ *     uint64_t memory;
+ *
+ *     if (wg_get_device_info(i, name, &major, &minor, &memory) == WG_SUCCESS) {
+ *         printf("Device %d: %s (sm_%d%d, %lu MB)\n",
+ *                i, name, major, minor, memory / (1024*1024));
+ *     }
+ * }
+ * ```
+ */
+int32_t wg_get_device_info(int32_t device_id,
+                           char *name_out,
+                           int32_t *compute_cap_major_out,
+                           int32_t *compute_cap_minor_out,
+                           uint64_t *total_memory_out);
 
 #endif  /* WORDLIST_GENERATOR_H */

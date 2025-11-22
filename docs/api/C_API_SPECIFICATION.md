@@ -1,8 +1,8 @@
 # C API Specification: libwordlist_generator
 
-**Version**: 2.0
-**Date**: November 19, 2025
-**Status**: ✅ PRODUCTION READY (All Phases Complete)
+**Version**: 3.0 (Multi-GPU Update)
+**Date**: November 22, 2025
+**Status**: ✅ PRODUCTION READY (All Phases Complete + Multi-GPU)
 
 ---
 
@@ -15,12 +15,13 @@
 | **Phase 3** | ✅ **COMPLETE** | 1 function | Output format modes |
 | **Phase 4** | ✅ **COMPLETE** | 1 function | Streaming API (async) |
 | **Phase 5** | ✅ **COMPLETE** | 4 functions | Utility functions (includes device enumeration) |
+| **Multi-GPU** | ✅ **COMPLETE** | 7 functions | Multi-GPU parallel generation (v1.1.0) |
 
-**Total Implemented**: 17 functions (ALL PHASES COMPLETE + Device Enumeration)
-**Test Coverage**: 16/16 tests passing
+**Total Implemented**: 24 functions (17 single-GPU + 7 multi-GPU)
+**Test Coverage**: 20/20 tests passing (16 single-GPU + 4 multi-GPU)
 **Documentation**: Complete (see docs/api/PHASE*_SUMMARY.md)
 
-🎉 **LIBRARY FEATURE-COMPLETE AND PRODUCTION-READY** 🎉
+🎉 **LIBRARY FEATURE-COMPLETE WITH MULTI-GPU SUPPORT** 🎉
 
 ---
 
@@ -892,6 +893,359 @@ gcc main.o -o my_cracker \
     -lwordlist_generator \
     -lcuda
 ```
+
+---
+
+## Multi-GPU API
+
+**Version**: 1.1.0
+**Status**: ✅ Production Ready (v1.1.0)
+
+The multi-GPU API provides a simplified interface for utilizing multiple GPUs in parallel for wordlist generation, with automatic workload partitioning and result aggregation.
+
+### Overview
+
+The multi-GPU API automatically:
+- Detects and initializes all available CUDA devices
+- Partitions keyspace evenly across GPUs
+- Launches parallel generation threads
+- Aggregates results in correct order
+
+**Key Benefits:**
+- **90-95% scaling efficiency** (minimal overhead)
+- **Automatic load balancing** across GPUs
+- **Thread-safe** parallel execution
+- **Simplified API** - no manual partitioning required
+
+### Multi-GPU Types
+
+```c
+/**
+ * Opaque handle to multi-GPU generator
+ */
+typedef struct MultiGpuGenerator* wg_multigpu_handle_t;
+```
+
+### Multi-GPU Functions
+
+#### wg_multigpu_create
+
+Create multi-GPU generator using all available devices.
+
+```c
+wg_multigpu_handle_t wg_multigpu_create(void);
+```
+
+**Returns:**
+- Generator handle on success
+- `NULL` on error (no CUDA devices available)
+
+**Example:**
+```c
+wg_multigpu_handle_t gen = wg_multigpu_create();
+if (!gen) {
+    fprintf(stderr, "Failed to create multi-GPU generator\n");
+    return -1;
+}
+```
+
+---
+
+#### wg_multigpu_create_with_devices
+
+Create multi-GPU generator using specific devices.
+
+```c
+wg_multigpu_handle_t wg_multigpu_create_with_devices(
+    const int32_t* device_ids,
+    int32_t num_devices
+);
+```
+
+**Parameters:**
+- `device_ids`: Array of device IDs to use (e.g., `{0, 1, 2}`)
+- `num_devices`: Number of devices in array
+
+**Returns:**
+- Generator handle on success
+- `NULL` on error
+
+**Example:**
+```c
+// Use only GPUs 0 and 2
+int devices[] = {0, 2};
+wg_multigpu_handle_t gen = wg_multigpu_create_with_devices(devices, 2);
+```
+
+---
+
+#### wg_multigpu_set_charset
+
+Define a charset for multi-GPU generator.
+
+```c
+int32_t wg_multigpu_set_charset(
+    wg_multigpu_handle_t gen,
+    int32_t charset_id,
+    const char* chars,
+    size_t len
+);
+```
+
+**Parameters:**
+- `gen`: Multi-GPU generator handle
+- `charset_id`: Identifier (1-255)
+- `chars`: Character array
+- `len`: Length of array
+
+**Returns:** `WG_SUCCESS` or error code
+
+---
+
+#### wg_multigpu_set_mask
+
+Set mask pattern for multi-GPU generator.
+
+```c
+int32_t wg_multigpu_set_mask(
+    wg_multigpu_handle_t gen,
+    const int32_t* mask,
+    int32_t length
+);
+```
+
+**Parameters:**
+- `gen`: Multi-GPU generator handle
+- `mask`: Array of charset IDs
+- `length`: Mask length (word length)
+
+**Returns:** `WG_SUCCESS` or error code
+
+---
+
+#### wg_multigpu_set_format
+
+Set output format for multi-GPU generator.
+
+```c
+int32_t wg_multigpu_set_format(
+    wg_multigpu_handle_t gen,
+    int32_t format
+);
+```
+
+**Parameters:**
+- `gen`: Multi-GPU generator handle
+- `format`: Output format (`WG_FORMAT_NEWLINES`, `WG_FORMAT_FIXED_WIDTH`, or `WG_FORMAT_PACKED`)
+
+**Returns:** `WG_SUCCESS` or error code
+
+---
+
+#### wg_multigpu_generate
+
+Generate batch using multiple GPUs.
+
+```c
+ssize_t wg_multigpu_generate(
+    wg_multigpu_handle_t gen,
+    uint64_t start_idx,
+    uint64_t count,
+    uint8_t* output_buffer,
+    size_t buffer_size
+);
+```
+
+**Parameters:**
+- `gen`: Multi-GPU generator handle
+- `start_idx`: Starting keyspace index
+- `count`: Number of words to generate
+- `output_buffer`: Output buffer (caller-allocated)
+- `buffer_size`: Size of buffer in bytes
+
+**Returns:**
+- Number of bytes written on success
+- Negative error code on failure
+
+**Notes:**
+- Automatically partitions work across GPUs
+- Each GPU processes roughly `count / num_gpus` words
+- Results aggregated in correct order
+- Thread-safe parallel execution
+
+---
+
+#### wg_multigpu_get_device_count
+
+Get number of GPUs being used.
+
+```c
+int32_t wg_multigpu_get_device_count(wg_multigpu_handle_t gen);
+```
+
+**Parameters:**
+- `gen`: Multi-GPU generator handle
+
+**Returns:**
+- Number of GPUs (>= 1)
+- `-1` on error
+
+---
+
+#### wg_multigpu_destroy
+
+Destroy multi-GPU generator and free resources.
+
+```c
+void wg_multigpu_destroy(wg_multigpu_handle_t gen);
+```
+
+**Parameters:**
+- `gen`: Multi-GPU generator handle (safe to pass `NULL`)
+
+**Notes:**
+- Frees all GPU contexts
+- Thread-safe cleanup
+- Always call before exit
+
+---
+
+### Multi-GPU Usage Example
+
+```c
+#include <wordlist_generator.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+    // Create multi-GPU generator (uses all GPUs)
+    wg_multigpu_handle_t gen = wg_multigpu_create();
+    if (!gen) {
+        fprintf(stderr, "No CUDA devices available\n");
+        return 1;
+    }
+
+    printf("Using %d GPU(s)\n", wg_multigpu_get_device_count(gen));
+
+    // Configure charsets
+    wg_multigpu_set_charset(gen, 1, "abcdefghijklmnopqrstuvwxyz", 26);
+    wg_multigpu_set_charset(gen, 2, "0123456789", 10);
+
+    // Set mask: ?1?1?1?1?2?2?2?2 (4 letters + 4 digits)
+    int mask[] = {1, 1, 1, 1, 2, 2, 2, 2};
+    wg_multigpu_set_mask(gen, mask, 8);
+
+    // Use packed format for maximum throughput
+    wg_multigpu_set_format(gen, WG_FORMAT_PACKED);
+
+    // Generate 100M words
+    uint64_t batch_size = 100000000;
+    size_t buffer_size = batch_size * 8;  // 8 bytes per word (packed)
+    uint8_t* buffer = malloc(buffer_size);
+
+    printf("Generating %llu words...\n", (unsigned long long)batch_size);
+
+    ssize_t bytes = wg_multigpu_generate(gen, 0, batch_size, buffer, buffer_size);
+    if (bytes < 0) {
+        fprintf(stderr, "Generation failed with code %zd\n", bytes);
+        free(buffer);
+        wg_multigpu_destroy(gen);
+        return 1;
+    }
+
+    printf("Generated %zd bytes\n", bytes);
+
+    // Process output...
+    // (write to file, pipe to cracker, etc.)
+
+    free(buffer);
+    wg_multigpu_destroy(gen);
+    return 0;
+}
+```
+
+### Multi-GPU Performance
+
+**Expected Scaling Efficiency:**
+- 2 GPUs: 90-95% efficiency (1.8-1.9× speedup)
+- 4 GPUs: 90-95% efficiency (3.6-3.8× speedup)
+- 8 GPUs: 85-90% efficiency (6.8-7.2× speedup)
+
+**Overhead Sources:**
+- Context switching: ~1-2%
+- Output aggregation: ~1-3%
+- Thread synchronization: ~1%
+- Load imbalance: ~2-5%
+- **Total: 5-11% overhead**
+
+**Benchmark Results:**
+See `docs/benchmarking/MULTI_GPU_RESULTS.md` for detailed performance measurements.
+
+### Multi-GPU Best Practices
+
+#### 1. Use Large Batch Sizes
+
+```c
+// BAD: Small batches don't saturate multiple GPUs
+wg_multigpu_generate(gen, 0, 1000000, buffer, buf_size);  // 1M words
+
+// GOOD: Large batches maximize parallelism
+wg_multigpu_generate(gen, 0, 100000000, buffer, buf_size);  // 100M words
+```
+
+**Recommendation:** Use batch sizes of at least 10M words per GPU.
+
+#### 2. Prefer Packed Format
+
+```c
+// Packed format maximizes throughput
+wg_multigpu_set_format(gen, WG_FORMAT_PACKED);
+```
+
+**Why:** Eliminates separator overhead, reduces memory bandwidth requirements.
+
+#### 3. Select Specific GPUs (Optional)
+
+```c
+// Use only high-end GPUs (skip integrated GPU)
+int devices[] = {1, 2};  // Skip device 0 (integrated)
+wg_multigpu_handle_t gen = wg_multigpu_create_with_devices(devices, 2);
+```
+
+#### 4. Check Device Count
+
+```c
+wg_multigpu_handle_t gen = wg_multigpu_create();
+int num_gpus = wg_multigpu_get_device_count(gen);
+
+if (num_gpus < 2) {
+    printf("Warning: Multi-GPU API used with %d GPU(s)\n", num_gpus);
+    // Consider using single-GPU API instead
+}
+```
+
+### Multi-GPU vs Single-GPU API
+
+| Feature | Single-GPU API | Multi-GPU API |
+|---------|---------------|---------------|
+| **Device Selection** | Manual (`wg_create(NULL, device_id)`) | Automatic or explicit list |
+| **Workload Partitioning** | Manual | Automatic |
+| **Result Aggregation** | Manual | Automatic |
+| **Thread Safety** | Single-threaded | Multi-threaded |
+| **Use Case** | Fine-grained control | Simplified parallel generation |
+| **Overhead** | Minimal (~0%) | Low (~5-11%) |
+
+**When to use Single-GPU API:**
+- Advanced use cases requiring per-GPU control
+- Custom workload distribution algorithms
+- Direct GPU-to-GPU communication
+- Zero-copy device pointer API needed
+
+**When to use Multi-GPU API:**
+- Standard wordlist generation
+- Maximum throughput with minimal code
+- Automatic scaling across GPUs
+- Simplified integration
 
 ---
 

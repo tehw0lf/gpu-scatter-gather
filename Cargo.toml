@@ -1,10 +1,10 @@
 [package]
 name = "gpu-scatter-gather"
-version = "0.1.0"
+version = "1.1.0"
 edition = "2021"
 authors = ["tehw0lf"]
 license = "MIT OR Apache-2.0"
-description = "World's fastest wordlist generator using GPU acceleration"
+description = "World's fastest wordlist generator using GPU acceleration with multi-GPU support"
 repository = "https://github.com/tehw0lf/gpu-scatter-gather"
 readme = "README.md"
 keywords = ["wordlist", "gpu", "cuda", "password", "security"]

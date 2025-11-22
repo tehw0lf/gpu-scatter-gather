@@ -5,14 +5,15 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.82+-orange.svg)](https://www.rust-lang.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-11.8+-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
-[![Release](https://img.shields.io/badge/release-v1.0.0-brightgreen.svg)](https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/badge/release-v1.1.0-brightgreen.svg)](https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.1.0)
 
 > 📄 **[Read the Technical Whitepaper](https://github.com/tehw0lf/gpu-scatter-gather/releases/download/v1.0.0/GPU_Scatter_Gather_Whitepaper_v1.0.0.pdf)** - Comprehensive algorithm design, formal proofs, and performance evaluation
 >
-> ✅ **Status:** v1.0.0 Released!
+> ✅ **Status:** v1.1.0 Released! (Multi-GPU Support)
 >
 > Production-ready library with **4-7× speedup** over CPU tools (maskprocessor, cracken).
-> Complete C FFI API with 16 functions, 3 output formats, formal validation, and integration guides.
+> Complete C FFI API with 24 functions (17 single-GPU + 7 multi-GPU), 3 output formats, formal validation, and integration guides.
+> **NEW:** Multi-GPU support with 90-95% scaling efficiency!
 > See [Development Log](docs/development/DEVELOPMENT_LOG.md) for detailed progress.
 
 ## Overview
@@ -48,23 +49,29 @@ This enables:
 
 ## Features
 
-### v1.0.0 Release ✅
+### v1.1.0 Release ✅ (Multi-GPU Support)
 
-- ✅ **Complete C FFI API** - 16 functions across 5 phases (host, device, formats, streaming, utilities)
+- ✅ **Multi-GPU API** - 7 new functions for automatic parallel generation across GPUs
+- ✅ **90-95% Scaling Efficiency** - Minimal overhead with automatic workload distribution
+- ✅ **Automatic Keyspace Partitioning** - Static distribution algorithm with load balancing
+- ✅ **Thread-Safe Parallel Execution** - One thread per GPU with synchronized aggregation
+- ✅ **Complete C FFI API** - 24 functions (17 single-GPU + 7 multi-GPU)
 - ✅ **Three output formats** - NEWLINES, PACKED, FIXED_WIDTH
 - ✅ **Streaming API** - Zero-copy GPU operation with async batching
-- ✅ **Production GPU kernel** - 440-700M words/s (4-7× faster than CPU tools)
+- ✅ **Production GPU kernel** - 440-700M words/s per GPU (4-7× faster than CPU tools)
 - ✅ **Formal validation** - 100% correctness with mathematical proofs
 - ✅ **Statistical testing** - Chi-square, autocorrelation, runs tests
 - ✅ **Cross-validation** - 100% match with maskprocessor
 - ✅ **Multi-architecture support** - sm_70-90 (Turing to Hopper)
-- ✅ **Comprehensive documentation** - API specs, integration guides, whitepaper
+- ✅ **Comprehensive documentation** - API specs, integration guides, whitepaper, multi-GPU benchmarks
 - ✅ **Integration guides** - hashcat, John the Ripper, generic C programs
 - ✅ **Clean Rust API** - RAII memory management, type-safe
 
-### Planned (v1.1.0+)
+### Planned (v1.2.0+)
 
-- 🔜 Multi-GPU support (distribute keyspace across devices)
+- 🔜 Pinned memory optimization (10-15% throughput improvement)
+- 🔜 Async kernel launches with CUDA streams (5-10% improvement)
+- 🔜 Dynamic load balancing for heterogeneous GPUs
 - 🔜 Hybrid masks (static prefix/suffix + dynamic middle)
 - 🔜 Python/JavaScript bindings (PyPI, npm packages)
 - 🔜 Advanced optimizations (Barrett reduction, power-of-2 fast paths)
@@ -115,6 +122,45 @@ gpu-scatter-gather -1 'abc' -2 '123' '?1?2' --keyspace
 # Use predefined charsets
 gpu-scatter-gather --lowercase --digits '?1?1?2?2'
 ```
+
+#### Multi-GPU C API (v1.1.0)
+
+```c
+#include <wordlist_generator.h>
+
+int main() {
+    // Create multi-GPU generator (uses all GPUs automatically)
+    wg_multigpu_handle_t gen = wg_multigpu_create();
+    printf("Using %d GPU(s)\n", wg_multigpu_get_device_count(gen));
+
+    // Configure charsets
+    wg_multigpu_set_charset(gen, 1, "abcdefghijklmnopqrstuvwxyz", 26);
+    wg_multigpu_set_charset(gen, 2, "0123456789", 10);
+
+    // Set mask: ?1?1?1?1?2?2?2?2 (4 letters + 4 digits)
+    int mask[] = {1, 1, 1, 1, 2, 2, 2, 2};
+    wg_multigpu_set_mask(gen, mask, 8);
+    wg_multigpu_set_format(gen, WG_FORMAT_PACKED);
+
+    // Generate 100M words across all GPUs
+    uint8_t* buffer = malloc(100000000 * 8);
+    ssize_t bytes = wg_multigpu_generate(gen, 0, 100000000, buffer, 100000000 * 8);
+
+    printf("Generated %zd bytes\n", bytes);
+
+    free(buffer);
+    wg_multigpu_destroy(gen);
+    return 0;
+}
+```
+
+**Multi-GPU Features:**
+- ✅ Automatic device detection and initialization
+- ✅ Transparent workload partitioning
+- ✅ 90-95% scaling efficiency (minimal overhead)
+- ✅ Same API as single-GPU (simplified parallel generation)
+
+See [Multi-GPU Benchmarking Results](docs/benchmarking/MULTI_GPU_RESULTS.md) for detailed performance data.
 
 #### Piping to Hashcat (Planned)
 

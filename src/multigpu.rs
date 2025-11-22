@@ -213,19 +213,106 @@ impl MultiGpuContext {
             .collect()
     }
 
-    /// Generate batch across all GPUs
+    /// Generate batch across all GPUs in parallel
     ///
-    /// This is a placeholder for future implementation in Week 4
+    /// This method distributes the workload across all GPUs using static partitioning
+    /// and executes generation concurrently using threads.
+    ///
+    /// # Arguments
+    /// * `charsets` - Character set definitions
+    /// * `mask` - Mask pattern
+    /// * `start_idx` - Starting index in global keyspace
+    /// * `batch_size` - Total number of words to generate
+    /// * `output_format` - Output format (WG_FORMAT_*)
+    ///
+    /// # Returns
+    /// Concatenated output from all GPUs in order
     pub fn generate_batch(
         &self,
-        _charsets: &HashMap<usize, Vec<u8>>,
-        _mask: &[usize],
-        _start_idx: u64,
-        _batch_size: u64,
-        _output_format: i32,
+        charsets: &HashMap<usize, Vec<u8>>,
+        mask: &[usize],
+        start_idx: u64,
+        batch_size: u64,
+        output_format: i32,
     ) -> Result<Vec<u8>> {
-        // TODO: Implement in Week 4 (parallel generation)
-        anyhow::bail!("Multi-GPU generation not yet implemented (Week 4)")
+        use std::sync::{Arc, Mutex};
+        use std::thread;
+
+        // Partition keyspace across GPUs
+        let partitions = self.partition(start_idx, batch_size);
+
+        // Shared data (charsets and mask)
+        let charsets = Arc::new(charsets.clone());
+        let mask = Arc::new(mask.to_vec());
+
+        // Results storage (indexed by GPU)
+        let results: Arc<Mutex<Vec<Option<Vec<u8>>>>> =
+            Arc::new(Mutex::new(vec![None; self.num_devices]));
+
+        // Launch generation on each GPU in parallel
+        let mut handles = Vec::new();
+
+        for (gpu_idx, partition) in partitions.iter().enumerate() {
+            // Skip empty partitions
+            if partition.count == 0 {
+                let results = Arc::clone(&results);
+                results.lock().unwrap()[gpu_idx] = Some(Vec::new());
+                continue;
+            }
+
+            let charsets = Arc::clone(&charsets);
+            let mask = Arc::clone(&mask);
+            let results = Arc::clone(&results);
+            let partition = *partition;
+
+            // Create a new GPU context for this thread
+            // Note: We can't share GpuContext across threads due to CUDA context threading model
+            // Each thread needs its own context
+            let device_id = self.workers[gpu_idx].device_id();
+
+            let handle = thread::spawn(move || {
+                // Create GPU context for this thread
+                let gpu_ctx = match GpuContext::with_device(device_id) {
+                    Ok(ctx) => ctx,
+                    Err(e) => {
+                        eprintln!("GPU {} failed to create context: {}", device_id, e);
+                        return;
+                    }
+                };
+
+                // Generate batch
+                match gpu_ctx.generate_batch(&charsets, &mask, partition.start_idx, partition.count, output_format) {
+                    Ok(output) => {
+                        results.lock().unwrap()[gpu_idx] = Some(output);
+                    }
+                    Err(e) => {
+                        eprintln!("GPU {} generation failed: {}", device_id, e);
+                    }
+                }
+            });
+
+            handles.push(handle);
+        }
+
+        // Wait for all GPUs to complete
+        for handle in handles {
+            handle.join().map_err(|_| anyhow::anyhow!("GPU thread panicked"))?;
+        }
+
+        // Aggregate results in order
+        let results = results.lock().unwrap();
+        let mut aggregated = Vec::new();
+
+        for (idx, result) in results.iter().enumerate() {
+            match result {
+                Some(data) => aggregated.extend_from_slice(data),
+                None => {
+                    anyhow::bail!("GPU {} did not produce output", idx);
+                }
+            }
+        }
+
+        Ok(aggregated)
     }
 }
 
@@ -376,6 +463,85 @@ mod tests {
             }
             Err(e) => {
                 println!("Failed to create worker for device 0: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_multi_gpu_generate_batch() {
+        // Test parallel generation across GPUs
+        match MultiGpuContext::with_devices(&[0]) {
+            Ok(ctx) => {
+                // Setup: Simple 2x2 keyspace (4 words total)
+                let mut charsets = HashMap::new();
+                charsets.insert(1, b"ab".to_vec());
+
+                let mask = vec![1, 1]; // ?1?1 = aa, ab, ba, bb
+
+                // Generate all 4 words
+                match ctx.generate_batch(&charsets, &mask, 0, 4, 0) {
+                    Ok(output) => {
+                        // Verify we got output
+                        assert!(!output.is_empty());
+
+                        // Convert to string for verification
+                        let output_str = String::from_utf8_lossy(&output);
+                        let lines: Vec<&str> = output_str.trim().split('\n').collect();
+
+                        // Should have 4 words
+                        assert_eq!(lines.len(), 4);
+
+                        // Verify words are correct
+                        assert_eq!(lines[0], "aa");
+                        assert_eq!(lines[1], "ab");
+                        assert_eq!(lines[2], "ba");
+                        assert_eq!(lines[3], "bb");
+
+                        println!("Multi-GPU generation successful: {:?}", lines);
+                    }
+                    Err(e) => {
+                        println!("Generation failed: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("No GPU available for generation test: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_multi_gpu_partial_keyspace() {
+        // Test generating a subset of the keyspace
+        match MultiGpuContext::with_devices(&[0]) {
+            Ok(ctx) => {
+                let mut charsets = HashMap::new();
+                charsets.insert(1, b"abc".to_vec());
+
+                let mask = vec![1, 1]; // 3x3 = 9 words total
+
+                // Generate middle 3 words (indices 3, 4, 5)
+                match ctx.generate_batch(&charsets, &mask, 3, 3, 0) {
+                    Ok(output) => {
+                        let output_str = String::from_utf8_lossy(&output);
+                        let lines: Vec<&str> = output_str.trim().split('\n').collect();
+
+                        assert_eq!(lines.len(), 3);
+
+                        // Words at indices 3, 4, 5 should be: ba, bb, bc
+                        assert_eq!(lines[0], "ba");
+                        assert_eq!(lines[1], "bb");
+                        assert_eq!(lines[2], "bc");
+
+                        println!("Partial keyspace generation successful: {:?}", lines);
+                    }
+                    Err(e) => {
+                        println!("Partial generation failed: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("No GPU available for partial generation test: {}", e);
             }
         }
     }

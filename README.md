@@ -5,16 +5,19 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.82+-orange.svg)](https://www.rust-lang.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-11.8+-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
+[![Release](https://img.shields.io/badge/release-v1.0.0-brightgreen.svg)](https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.0.0)
 
-> ✅ **Status:** Phase 2.7 (C API) - Phase 1 Complete!
+> 📄 **[Read the Technical Whitepaper](https://github.com/tehw0lf/gpu-scatter-gather/releases/download/v1.0.0/GPU_Scatter_Gather_Whitepaper_v1.0.0.pdf)** - Comprehensive algorithm design, formal proofs, and performance evaluation
 >
-> The production GPU kernel is **working and validated** with **1.2B+ words/s** throughput!
-> C FFI layer now available for integration into existing tools.
+> ✅ **Status:** v1.0.0 Released!
+>
+> Production-ready library with **4-7× speedup** over CPU tools (maskprocessor, cracken).
+> Complete C FFI API with 16 functions, 3 output formats, formal validation, and integration guides.
 > See [Development Log](docs/development/DEVELOPMENT_LOG.md) for detailed progress.
 
 ## Overview
 
-GPU Scatter-Gather is a GPU-accelerated wordlist generator that achieves **635M-1.2B+ words/second** - up to **8.7x faster than maskprocessor** - using a novel scatter-gather algorithm based on mixed-radix arithmetic.
+GPU Scatter-Gather is a GPU-accelerated wordlist generator that achieves **440-700M words/second** - **4-7× faster than maskprocessor** - using a novel scatter-gather algorithm based on mixed-radix arithmetic.
 
 ### Key Innovation
 
@@ -37,38 +40,35 @@ This enables:
 
 | Tool | Speed | Speedup |
 |------|-------|---------|
-| **GPU Scatter-Gather** | **635M-1,237M words/s** | **4.5x-8.7x** 🏆 |
-| maskprocessor (CPU) | 142M words/s | 1.0x (baseline) |
-| crunch (CPU) | 5M words/s | 0.035x |
+| **GPU Scatter-Gather** | **440-700M words/s** | **4-7×** 🏆 |
+| maskprocessor (CPU) | 100-142M words/s | 1.0× (baseline) |
+| cracken (CPU) | ~100M words/s | ~1.0× |
 
-*Note: Production benchmarks include full memory I/O and PCIe transfers. See [Benchmarking docs](docs/benchmarking/) for methodology and detailed results.*
+*Note: v1.0.0 benchmarks with complete C FFI overhead and realistic workloads. See [Technical Whitepaper](https://github.com/tehw0lf/gpu-scatter-gather/releases/download/v1.0.0/GPU_Scatter_Gather_Whitepaper_v1.0.0.pdf) for detailed methodology and validation.*
 
 ## Features
 
-### Current (Phase 2.7 - C API Layer ✅)
+### v1.0.0 Release ✅
 
-- ✅ CPU reference implementation with full test coverage (25 tests passing)
-- ✅ CUDA kernel infrastructure with multi-architecture support
-- ✅ **Production GPU kernel with memory output (635M-1.2B+ words/s)**
-- ✅ **100% output correctness validated with formal proofs**
-- ✅ Mixed-radix index-to-word algorithm validated
-- ✅ Hashcat-compatible mask format (`?1?2?3`)
-- ✅ Working CLI for simple wordlist generation
-- ✅ **C Foreign Function Interface (FFI) for library integration**
-- ✅ Comprehensive documentation and benchmarks
-- ✅ Clean Rust API with RAII memory management
+- ✅ **Complete C FFI API** - 16 functions across 5 phases (host, device, formats, streaming, utilities)
+- ✅ **Three output formats** - NEWLINES, PACKED, FIXED_WIDTH
+- ✅ **Streaming API** - Zero-copy GPU operation with async batching
+- ✅ **Production GPU kernel** - 440-700M words/s (4-7× faster than CPU tools)
+- ✅ **Formal validation** - 100% correctness with mathematical proofs
+- ✅ **Statistical testing** - Chi-square, autocorrelation, runs tests
+- ✅ **Cross-validation** - 100% match with maskprocessor
+- ✅ **Multi-architecture support** - sm_70-90 (Turing to Hopper)
+- ✅ **Comprehensive documentation** - API specs, integration guides, whitepaper
+- ✅ **Integration guides** - hashcat, John the Ripper, generic C programs
+- ✅ **Clean Rust API** - RAII memory management, type-safe
 
-### In Progress (Phase 2.7 Phase 2)
+### Planned (v1.1.0+)
 
-- 🔄 **Device pointer API (zero-copy GPU operation)**
-- 🔄 Output format modes (newlines, fixed-width, packed)
-- 🔄 CUDA stream API for async generation
-
-### Planned (Phase 3+)
-
-- 🔄 Multi-GPU support
-- 🔄 Python/Node.js language bindings
-- 🔄 Advanced optimizations (Barrett reduction, power-of-2 charsets)
+- 🔜 Multi-GPU support (distribute keyspace across devices)
+- 🔜 Hybrid masks (static prefix/suffix + dynamic middle)
+- 🔜 Python/JavaScript bindings (PyPI, npm packages)
+- 🔜 Advanced optimizations (Barrett reduction, power-of-2 fast paths)
+- 🔜 OpenCL backend (AMD/Intel GPU support)
 
 ## Quick Start
 

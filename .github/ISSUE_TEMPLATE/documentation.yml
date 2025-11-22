@@ -1,0 +1,75 @@
+name: Documentation Issue
+description: Report issues with documentation or suggest improvements
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation!
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation issue is this?
+      options:
+        - Missing documentation
+        - Incorrect/outdated information
+        - Unclear explanation
+        - Typo/grammar
+        - Code example doesn't work
+        - Suggestion for improvement
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Where is the documentation issue?
+      options:
+        - README.md
+        - Technical Whitepaper
+        - C API Specification
+        - Integration guides (hashcat/JtR)
+        - Formal specification
+        - Rust API docs (docs.rs)
+        - Code comments
+        - Examples
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: Issue Description
+      description: Describe the documentation issue
+      placeholder: The documentation says... but it should say...
+    validations:
+      required: true
+
+  - type: textarea
+    id: location_details
+    attributes:
+      label: Specific Location
+      description: Please provide the specific location (file path, section, line number)
+      placeholder: |
+        - File: docs/api/C_API_SPECIFICATION.md
+        - Section: Phase 1 API
+        - Line: ~123
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Fix
+      description: If you have a suggestion for how to fix or improve the documentation, please share it
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I can submit a PR to fix this documentation issue
+          required: false

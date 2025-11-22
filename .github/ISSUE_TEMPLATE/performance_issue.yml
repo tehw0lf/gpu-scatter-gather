@@ -1,0 +1,105 @@
+name: Performance Issue
+description: Report unexpected performance behavior or bottlenecks
+labels: ["performance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a performance issue! Detailed information helps us optimize the library.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Performance Issue Description
+      description: Describe the performance problem you're experiencing
+      placeholder: The library is slower than expected when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: benchmark
+    attributes:
+      label: Benchmark Results
+      description: Provide actual performance numbers
+      placeholder: |
+        - Observed throughput: XXX M words/s
+        - Expected throughput: XXX M words/s
+        - Mask pattern: ?1?2?3...
+        - Batch size: XXX
+    validations:
+      required: true
+
+  - type: textarea
+    id: comparison
+    attributes:
+      label: Comparison with Other Tools
+      description: If applicable, compare with maskprocessor, cracken, or other tools
+      placeholder: |
+        - gpu-scatter-gather: XXX M words/s
+        - maskprocessor: XXX M words/s
+        - cracken: XXX M words/s
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware Details
+      description: Detailed GPU and system information
+      value: |
+        GPU:
+        - Model: [run `nvidia-smi --query-gpu=name --format=csv,noheader`]
+        - CUDA cores:
+        - Compute capability: [run `nvidia-smi --query-gpu=compute_cap --format=csv,noheader`]
+        - Memory: [run `nvidia-smi --query-gpu=memory.total --format=csv,noheader`]
+        - Memory bandwidth:
+        - PCIe generation: [run `nvidia-smi --query-gpu=pcie.link.gen.max --format=csv,noheader`]
+        - PCIe width: [run `nvidia-smi --query-gpu=pcie.link.width.max --format=csv,noheader`]
+
+        System:
+        - CPU:
+        - RAM:
+        - OS:
+        - CUDA version: [run `nvcc --version`]
+    validations:
+      required: true
+
+  - type: textarea
+    id: workload
+    attributes:
+      label: Workload Details
+      description: Details about your specific workload
+      placeholder: |
+        - Mask pattern:
+        - Keyspace size:
+        - Output format: NEWLINES / PACKED / FIXED_WIDTH
+        - API used: Host / Device / Streaming
+    validations:
+      required: true
+
+  - type: textarea
+    id: profiling
+    attributes:
+      label: Profiling Data
+      description: If you've done any profiling (Nsight Compute, nvprof, etc.), share the results
+      render: shell
+
+  - type: dropdown
+    id: bottleneck
+    attributes:
+      label: Suspected Bottleneck
+      description: What do you think is causing the performance issue?
+      options:
+        - PCIe bandwidth (memory transfer)
+        - GPU memory bandwidth
+        - GPU compute
+        - CPU overhead
+        - API overhead
+        - Kernel launch overhead
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other information that might help diagnose the performance issue

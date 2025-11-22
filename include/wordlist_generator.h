@@ -248,7 +248,7 @@ void wg_free_batch_device(struct wg_WordlistGenerator *gen, struct wg_BatchDevic
  * ```
  */
 int32_t wg_generate_batch_stream(struct wg_WordlistGenerator *gen,
-                                 CUstream stream,
+                                 wg_CUstream stream,
                                  uint64_t start_idx,
                                  uint64_t count,
                                  struct wg_BatchDevice *batch);
@@ -451,4 +451,4 @@ int32_t wg_multigpu_get_device_count(struct wg_MultiGpuGenerator *gen);
  */
 void wg_multigpu_destroy(struct wg_MultiGpuGenerator *gen);
 
-#endif  /* WORDLIST_GENERATOR_H */
+#endif /* WORDLIST_GENERATOR_H */

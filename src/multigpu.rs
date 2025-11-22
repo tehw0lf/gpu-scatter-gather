@@ -6,6 +6,75 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use crate::gpu::GpuContext;
 
+/// Keyspace partition for a single GPU
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyspacePartition {
+    /// Starting index in the keyspace
+    pub start_idx: u64,
+    /// Number of words to generate
+    pub count: u64,
+}
+
+impl KeyspacePartition {
+    /// Create a new keyspace partition
+    pub fn new(start_idx: u64, count: u64) -> Self {
+        Self { start_idx, count }
+    }
+
+    /// Get the end index (exclusive)
+    pub fn end_idx(&self) -> u64 {
+        self.start_idx + self.count
+    }
+}
+
+/// Partition keyspace across multiple GPUs
+///
+/// Uses static partitioning: divides keyspace evenly, with any remainder
+/// going to the first GPU.
+///
+/// # Arguments
+/// * `total_keyspace` - Total number of words to generate
+/// * `num_gpus` - Number of GPUs to distribute across
+///
+/// # Returns
+/// Vector of partitions, one per GPU
+///
+/// # Example
+/// ```
+/// use gpu_scatter_gather::multigpu::partition_keyspace;
+///
+/// let partitions = partition_keyspace(1_000_000, 3);
+/// assert_eq!(partitions.len(), 3);
+/// assert_eq!(partitions[0].count, 333_334); // Gets the extra 1
+/// assert_eq!(partitions[1].count, 333_333);
+/// assert_eq!(partitions[2].count, 333_333);
+/// ```
+pub fn partition_keyspace(total_keyspace: u64, num_gpus: usize) -> Vec<KeyspacePartition> {
+    if num_gpus == 0 {
+        return vec![];
+    }
+
+    let chunk_size = total_keyspace / num_gpus as u64;
+    let remainder = total_keyspace % num_gpus as u64;
+
+    let mut partitions = Vec::with_capacity(num_gpus);
+    let mut start_idx = 0;
+
+    for gpu_id in 0..num_gpus {
+        // Give remainder to first GPU for load balancing
+        let count = if gpu_id == 0 {
+            chunk_size + remainder
+        } else {
+            chunk_size
+        };
+
+        partitions.push(KeyspacePartition::new(start_idx, count));
+        start_idx += count;
+    }
+
+    partitions
+}
+
 /// Worker managing a single GPU device
 pub struct GpuWorker {
     /// Device ID (0-based)
@@ -126,6 +195,24 @@ impl MultiGpuContext {
         self.workers.get_mut(index)
     }
 
+    /// Partition a keyspace for generation across GPUs
+    ///
+    /// # Arguments
+    /// * `start_idx` - Starting index in global keyspace
+    /// * `count` - Total number of words to generate
+    ///
+    /// # Returns
+    /// Vector of partitions, one per active GPU
+    pub fn partition(&self, start_idx: u64, count: u64) -> Vec<KeyspacePartition> {
+        let partitions = partition_keyspace(count, self.num_devices);
+
+        // Adjust partitions to account for global start_idx offset
+        partitions
+            .into_iter()
+            .map(|p| KeyspacePartition::new(start_idx + p.start_idx, p.count))
+            .collect()
+    }
+
     /// Generate batch across all GPUs
     ///
     /// This is a placeholder for future implementation in Week 4
@@ -146,6 +233,91 @@ impl MultiGpuContext {
 mod tests {
     use super::*;
 
+    // Keyspace partitioning tests
+    #[test]
+    fn test_partition_keyspace_even() {
+        let partitions = partition_keyspace(1000, 4);
+        assert_eq!(partitions.len(), 4);
+        assert_eq!(partitions[0], KeyspacePartition::new(0, 250));
+        assert_eq!(partitions[1], KeyspacePartition::new(250, 250));
+        assert_eq!(partitions[2], KeyspacePartition::new(500, 250));
+        assert_eq!(partitions[3], KeyspacePartition::new(750, 250));
+
+        // Verify coverage
+        assert_eq!(partitions[3].end_idx(), 1000);
+    }
+
+    #[test]
+    fn test_partition_keyspace_uneven() {
+        let partitions = partition_keyspace(1001, 4);
+        assert_eq!(partitions.len(), 4);
+        assert_eq!(partitions[0], KeyspacePartition::new(0, 251)); // Gets extra 1
+        assert_eq!(partitions[1], KeyspacePartition::new(251, 250));
+        assert_eq!(partitions[2], KeyspacePartition::new(501, 250));
+        assert_eq!(partitions[3], KeyspacePartition::new(751, 250));
+
+        // Verify total coverage
+        let total: u64 = partitions.iter().map(|p| p.count).sum();
+        assert_eq!(total, 1001);
+        assert_eq!(partitions[3].end_idx(), 1001);
+    }
+
+    #[test]
+    fn test_partition_keyspace_small() {
+        // Keyspace smaller than GPU count
+        let partitions = partition_keyspace(2, 4);
+        assert_eq!(partitions.len(), 4);
+        assert_eq!(partitions[0], KeyspacePartition::new(0, 2)); // Gets all
+        assert_eq!(partitions[1], KeyspacePartition::new(2, 0)); // Empty
+        assert_eq!(partitions[2], KeyspacePartition::new(2, 0)); // Empty
+        assert_eq!(partitions[3], KeyspacePartition::new(2, 0)); // Empty
+
+        let total: u64 = partitions.iter().map(|p| p.count).sum();
+        assert_eq!(total, 2);
+    }
+
+    #[test]
+    fn test_partition_keyspace_single_gpu() {
+        let partitions = partition_keyspace(1000000, 1);
+        assert_eq!(partitions.len(), 1);
+        assert_eq!(partitions[0], KeyspacePartition::new(0, 1000000));
+    }
+
+    #[test]
+    fn test_partition_keyspace_zero_gpus() {
+        let partitions = partition_keyspace(1000, 0);
+        assert_eq!(partitions.len(), 0);
+    }
+
+    #[test]
+    fn test_partition_keyspace_large() {
+        // Test with realistic large keyspace
+        let partitions = partition_keyspace(100_000_000, 3);
+        assert_eq!(partitions.len(), 3);
+
+        // 100M / 3 = 33,333,333 with remainder 1
+        assert_eq!(partitions[0].count, 33_333_334);
+        assert_eq!(partitions[1].count, 33_333_333);
+        assert_eq!(partitions[2].count, 33_333_333);
+
+        // Verify no gaps or overlaps
+        assert_eq!(partitions[0].end_idx(), partitions[1].start_idx);
+        assert_eq!(partitions[1].end_idx(), partitions[2].start_idx);
+        assert_eq!(partitions[2].end_idx(), 100_000_000);
+
+        let total: u64 = partitions.iter().map(|p| p.count).sum();
+        assert_eq!(total, 100_000_000);
+    }
+
+    #[test]
+    fn test_keyspace_partition_end_idx() {
+        let partition = KeyspacePartition::new(100, 50);
+        assert_eq!(partition.start_idx, 100);
+        assert_eq!(partition.count, 50);
+        assert_eq!(partition.end_idx(), 150);
+    }
+
+    // Multi-GPU context tests
     #[test]
     fn test_multi_gpu_context_creation() {
         // Try to create multi-GPU context
@@ -157,6 +329,26 @@ mod tests {
             }
             Err(e) => {
                 println!("No GPUs available: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_multi_gpu_partition() {
+        // Test partitioning logic with mock context
+        // We can test this even without actual GPUs by creating a mock
+        // For now, test the standalone partition_keyspace function
+        match MultiGpuContext::with_devices(&[0]) {
+            Ok(ctx) => {
+                // Test partitioning with offset
+                let partitions = ctx.partition(1000, 100);
+                assert_eq!(partitions.len(), 1);
+                assert_eq!(partitions[0].start_idx, 1000);
+                assert_eq!(partitions[0].count, 100);
+                assert_eq!(partitions[0].end_idx(), 1100);
+            }
+            Err(e) => {
+                println!("No GPU available for partition test: {}", e);
             }
         }
     }

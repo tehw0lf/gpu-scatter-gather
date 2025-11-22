@@ -1,10 +1,10 @@
 # Next Session: Post v1.1.0 Release
 
-**Status**: ✅ **v1.1.0 Released!** | 🎉 **Multi-GPU Support Complete**
+**Status**: ✅ **v1.1.0 Released!** | 📊 **Performance Optimization Research Complete**
 **Date**: November 22, 2025
 **Repository**: https://github.com/tehw0lf/gpu-scatter-gather
 **Current Version**: v1.1.0 (Multi-GPU Support)
-**Next Version**: v1.2.0 (Performance Optimizations)
+**Next Version**: v1.2.0 (Multi-GPU Optimizations or Community Engagement)
 
 ---
 
@@ -66,9 +66,26 @@ cargo run --release --example benchmark_multigpu
 
 ---
 
-## Next Steps: v1.2.0 - Performance Optimizations
+## Recent Activity: Single-GPU Optimization Research (Nov 22, 2025)
 
-### Priority 1: Multi-GPU Optimizations (20-30% throughput gain)
+**Attempted:** GPU-based transpose to address memory coalescing issues
+**Result:** ❌ FAILED - 2-4× slower than baseline (99-170 M words/s vs 440 M words/s)
+**Root Cause:** Matrix shape mismatch - wordlist transpose (50M × 13) has terrible aspect ratio for tile-based algorithms
+**Documentation:** `docs/archive/GPU_TRANSPOSE_ATTEMPT_2025-11-22.md`
+
+**Key Finding:** Current row-major "uncoalesced" kernel at 440 M words/s is **OPTIMAL** for this workload.
+
+Both major single-GPU optimizations have now failed:
+1. ❌ CPU transpose (Phase 3): 5.3× slower (RAM bandwidth bottleneck)
+2. ❌ GPU transpose (Nov 22): 2-4× slower (poor tile utilization)
+
+**Conclusion:** Accept current single-GPU performance. Focus on multi-GPU scaling instead.
+
+---
+
+## Next Steps: v1.2.0
+
+### Option 1: Multi-GPU Optimizations (20-30% throughput gain) ⭐ **Recommended**
 
 **Goal:** Improve multi-GPU efficiency from 90-95% to near-100%
 
@@ -167,7 +184,7 @@ cargo run --release --example benchmark_multigpu
 
 ---
 
-### Priority 4: Optional Enhancements
+### Option 3: Optional Enhancements (Low Priority)
 
 See `docs/development/OPTIONAL_ENHANCEMENTS.md` for full list:
 

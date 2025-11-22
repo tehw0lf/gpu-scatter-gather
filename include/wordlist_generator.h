@@ -76,6 +76,13 @@ typedef struct wg_BatchDevice {
 } wg_BatchDevice;
 
 /**
+ * Opaque handle to multi-GPU wordlist generator (exported to C)
+ */
+typedef struct wg_MultiGpuGenerator {
+    uint8_t _private[0];
+} wg_MultiGpuGenerator;
+
+/**
  * Create a new wordlist generator
  *
  * # Arguments
@@ -342,5 +349,106 @@ int32_t wg_get_device_info(int32_t device_id,
                            int32_t *compute_cap_major_out,
                            int32_t *compute_cap_minor_out,
                            uint64_t *total_memory_out);
+
+/**
+ * Create multi-GPU generator using all available devices
+ *
+ * # Returns
+ * Generator handle, or NULL on error
+ */
+struct wg_MultiGpuGenerator *wg_multigpu_create(void);
+
+/**
+ * Create multi-GPU generator using specific devices
+ *
+ * # Arguments
+ * * `device_ids` - Array of device IDs to use
+ * * `num_devices` - Number of devices in array
+ *
+ * # Returns
+ * Generator handle, or NULL on error
+ */
+struct wg_MultiGpuGenerator *wg_multigpu_create_with_devices(const int32_t *device_ids,
+                                                             int32_t num_devices);
+
+/**
+ * Set charset for multi-GPU generator
+ *
+ * # Arguments
+ * * `gen` - Multi-GPU generator handle
+ * * `charset_id` - Identifier (1-255)
+ * * `chars` - Character array
+ * * `len` - Length of character array
+ *
+ * # Returns
+ * WG_SUCCESS or error code
+ */
+int32_t wg_multigpu_set_charset(struct wg_MultiGpuGenerator *gen,
+                                int32_t charset_id,
+                                const char *chars,
+                                uintptr_t len);
+
+/**
+ * Set mask pattern for multi-GPU generator
+ *
+ * # Arguments
+ * * `gen` - Multi-GPU generator handle
+ * * `mask` - Array of charset IDs
+ * * `length` - Number of positions (word length)
+ *
+ * # Returns
+ * WG_SUCCESS or error code
+ */
+int32_t wg_multigpu_set_mask(struct wg_MultiGpuGenerator *gen, const int32_t *mask, int32_t length);
+
+/**
+ * Set output format for multi-GPU generator
+ *
+ * # Arguments
+ * * `gen` - Multi-GPU generator handle
+ * * `format` - Output format (WG_FORMAT_*)
+ *
+ * # Returns
+ * WG_SUCCESS or error code
+ */
+int32_t wg_multigpu_set_format(struct wg_MultiGpuGenerator *gen, int32_t format);
+
+/**
+ * Generate batch using multiple GPUs
+ *
+ * # Arguments
+ * * `gen` - Multi-GPU generator handle
+ * * `start_idx` - Starting index in keyspace
+ * * `count` - Number of words to generate
+ * * `output_buffer` - Output buffer
+ * * `buffer_size` - Size of output buffer
+ *
+ * # Returns
+ * Number of bytes written, or negative error code
+ */
+intptr_t wg_multigpu_generate(struct wg_MultiGpuGenerator *gen,
+                              uint64_t start_idx,
+                              uint64_t count,
+                              uint8_t *output_buffer,
+                              uintptr_t buffer_size);
+
+/**
+ * Get number of GPUs being used
+ *
+ * # Arguments
+ * * `gen` - Multi-GPU generator handle
+ *
+ * # Returns
+ * Number of GPUs, or -1 on error
+ */
+int32_t wg_multigpu_get_device_count(struct wg_MultiGpuGenerator *gen);
+
+/**
+ * Destroy multi-GPU generator and free all resources
+ *
+ * # Safety
+ * Safe to call with NULL (no-op)
+ */
+void wg_multigpu_destroy(struct wg_MultiGpuGenerator *gen);
 
 #endif  /* WORDLIST_GENERATOR_H */

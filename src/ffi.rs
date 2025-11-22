@@ -8,6 +8,7 @@ use std::os::raw::c_char;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use crate::gpu::GpuContext;
+use crate::multigpu::MultiGpuContext;
 use cuda_driver_sys::*;
 
 // Error codes (matching C API specification)
@@ -28,6 +29,12 @@ pub const WG_FORMAT_PACKED: i32 = 2;  // Future: no separators
 /// Opaque handle to wordlist generator (exported to C)
 #[repr(C)]
 pub struct WordlistGenerator {
+    _private: [u8; 0], // Zero-sized, prevents construction in C
+}
+
+/// Opaque handle to multi-GPU wordlist generator (exported to C)
+#[repr(C)]
+pub struct MultiGpuGenerator {
     _private: [u8; 0], // Zero-sized, prevents construction in C
 }
 
@@ -59,6 +66,14 @@ struct GeneratorInternal {
     current_batch: Option<CUdeviceptr>,  // Track active device memory
     owns_context: bool,  // Whether we created the CUDA context
     output_format: i32,  // Output format mode (WG_FORMAT_*)
+}
+
+/// Internal multi-GPU generator state (not exposed to C)
+struct MultiGpuGeneratorInternal {
+    multi_gpu: MultiGpuContext,
+    charsets: HashMap<usize, Vec<u8>>,
+    mask: Option<Vec<usize>>,
+    output_format: i32,
 }
 
 impl GeneratorInternal {
@@ -950,5 +965,359 @@ pub extern "C" fn wg_get_device_info(
         *total_memory_out = total_mem as u64;
 
         WG_SUCCESS
+    }
+}
+
+// ===========================================================================
+// Multi-GPU API
+// ===========================================================================
+
+/// Helper: Convert opaque multi-GPU handle to internal reference
+unsafe fn multigpu_handle_to_internal<'a>(
+    gen: *mut MultiGpuGenerator
+) -> Option<&'a mut MultiGpuGeneratorInternal> {
+    if gen.is_null() {
+        return None;
+    }
+    Some(&mut *(gen as *mut MultiGpuGeneratorInternal))
+}
+
+/// Create multi-GPU generator using all available devices
+///
+/// # Returns
+/// Generator handle, or NULL on error
+#[no_mangle]
+pub extern "C" fn wg_multigpu_create() -> *mut MultiGpuGenerator {
+    let result = std::panic::catch_unwind(|| {
+        let multi_gpu = match MultiGpuContext::new() {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                set_error(format!("Failed to create multi-GPU context: {}", e));
+                return std::ptr::null_mut();
+            }
+        };
+
+        let internal = Box::new(MultiGpuGeneratorInternal {
+            multi_gpu,
+            charsets: HashMap::new(),
+            mask: None,
+            output_format: WG_FORMAT_NEWLINES,
+        });
+
+        Box::into_raw(internal) as *mut MultiGpuGenerator
+    });
+
+    result.unwrap_or_else(|_| {
+        set_error("Panic during multi-GPU initialization".to_string());
+        std::ptr::null_mut()
+    })
+}
+
+/// Create multi-GPU generator using specific devices
+///
+/// # Arguments
+/// * `device_ids` - Array of device IDs to use
+/// * `num_devices` - Number of devices in array
+///
+/// # Returns
+/// Generator handle, or NULL on error
+#[no_mangle]
+pub extern "C" fn wg_multigpu_create_with_devices(
+    device_ids: *const i32,
+    num_devices: i32,
+) -> *mut MultiGpuGenerator {
+    if device_ids.is_null() || num_devices <= 0 {
+        set_error("Invalid device_ids or num_devices".to_string());
+        return std::ptr::null_mut();
+    }
+
+    let result = std::panic::catch_unwind(|| {
+        let device_ids_slice = unsafe {
+            std::slice::from_raw_parts(device_ids, num_devices as usize)
+        };
+
+        let multi_gpu = match MultiGpuContext::with_devices(device_ids_slice) {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                set_error(format!("Failed to create multi-GPU context: {}", e));
+                return std::ptr::null_mut();
+            }
+        };
+
+        let internal = Box::new(MultiGpuGeneratorInternal {
+            multi_gpu,
+            charsets: HashMap::new(),
+            mask: None,
+            output_format: WG_FORMAT_NEWLINES,
+        });
+
+        Box::into_raw(internal) as *mut MultiGpuGenerator
+    });
+
+    result.unwrap_or_else(|_| {
+        set_error("Panic during multi-GPU initialization".to_string());
+        std::ptr::null_mut()
+    })
+}
+
+/// Set charset for multi-GPU generator
+///
+/// # Arguments
+/// * `gen` - Multi-GPU generator handle
+/// * `charset_id` - Identifier (1-255)
+/// * `chars` - Character array
+/// * `len` - Length of character array
+///
+/// # Returns
+/// WG_SUCCESS or error code
+#[no_mangle]
+pub extern "C" fn wg_multigpu_set_charset(
+    gen: *mut MultiGpuGenerator,
+    charset_id: i32,
+    chars: *const c_char,
+    len: usize,
+) -> i32 {
+    let internal = unsafe {
+        match multigpu_handle_to_internal(gen) {
+            Some(g) => g,
+            None => {
+                set_error("Invalid multi-GPU generator handle".to_string());
+                return WG_ERROR_INVALID_HANDLE;
+            }
+        }
+    };
+
+    // Validate charset_id
+    if charset_id <= 0 || charset_id > 255 {
+        set_error(format!("Invalid charset_id: {}", charset_id));
+        return WG_ERROR_INVALID_PARAM;
+    }
+
+    // Validate pointer
+    if chars.is_null() {
+        set_error("Null charset pointer".to_string());
+        return WG_ERROR_INVALID_PARAM;
+    }
+
+    // Validate length
+    if len == 0 || len > 512 {
+        set_error(format!("Invalid charset length: {}", len));
+        return WG_ERROR_INVALID_PARAM;
+    }
+
+    // Convert C string to Rust Vec<u8>
+    let charset_bytes = unsafe {
+        std::slice::from_raw_parts(chars as *const u8, len)
+    }.to_vec();
+
+    // Store charset
+    internal.charsets.insert(charset_id as usize, charset_bytes);
+
+    WG_SUCCESS
+}
+
+/// Set mask pattern for multi-GPU generator
+///
+/// # Arguments
+/// * `gen` - Multi-GPU generator handle
+/// * `mask` - Array of charset IDs
+/// * `length` - Number of positions (word length)
+///
+/// # Returns
+/// WG_SUCCESS or error code
+#[no_mangle]
+pub extern "C" fn wg_multigpu_set_mask(
+    gen: *mut MultiGpuGenerator,
+    mask: *const i32,
+    length: i32,
+) -> i32 {
+    let internal = unsafe {
+        match multigpu_handle_to_internal(gen) {
+            Some(g) => g,
+            None => {
+                set_error("Invalid multi-GPU generator handle".to_string());
+                return WG_ERROR_INVALID_HANDLE;
+            }
+        }
+    };
+
+    if mask.is_null() {
+        set_error("Null mask pointer".to_string());
+        return WG_ERROR_INVALID_PARAM;
+    }
+
+    if length <= 0 || length > 32 {
+        set_error(format!("Invalid mask length: {}", length));
+        return WG_ERROR_INVALID_PARAM;
+    }
+
+    // Convert C array to Rust Vec
+    let mask_vec = unsafe {
+        std::slice::from_raw_parts(mask, length as usize)
+    }.iter().map(|&x| x as usize).collect::<Vec<_>>();
+
+    // Validate all charset IDs exist
+    for &charset_id in &mask_vec {
+        if !internal.charsets.contains_key(&charset_id) {
+            set_error(format!("Undefined charset ID in mask: {}", charset_id));
+            return WG_ERROR_INVALID_PARAM;
+        }
+    }
+
+    internal.mask = Some(mask_vec);
+
+    WG_SUCCESS
+}
+
+/// Set output format for multi-GPU generator
+///
+/// # Arguments
+/// * `gen` - Multi-GPU generator handle
+/// * `format` - Output format (WG_FORMAT_*)
+///
+/// # Returns
+/// WG_SUCCESS or error code
+#[no_mangle]
+pub extern "C" fn wg_multigpu_set_format(
+    gen: *mut MultiGpuGenerator,
+    format: i32,
+) -> i32 {
+    let internal = unsafe {
+        match multigpu_handle_to_internal(gen) {
+            Some(g) => g,
+            None => {
+                set_error("Invalid multi-GPU generator handle".to_string());
+                return WG_ERROR_INVALID_HANDLE;
+            }
+        }
+    };
+
+    // Validate format
+    if format < WG_FORMAT_NEWLINES || format > WG_FORMAT_PACKED {
+        set_error(format!("Invalid format: {}", format));
+        return WG_ERROR_INVALID_PARAM;
+    }
+
+    internal.output_format = format;
+    WG_SUCCESS
+}
+
+/// Generate batch using multiple GPUs
+///
+/// # Arguments
+/// * `gen` - Multi-GPU generator handle
+/// * `start_idx` - Starting index in keyspace
+/// * `count` - Number of words to generate
+/// * `output_buffer` - Output buffer
+/// * `buffer_size` - Size of output buffer
+///
+/// # Returns
+/// Number of bytes written, or negative error code
+#[no_mangle]
+pub extern "C" fn wg_multigpu_generate(
+    gen: *mut MultiGpuGenerator,
+    start_idx: u64,
+    count: u64,
+    output_buffer: *mut u8,
+    buffer_size: usize,
+) -> isize {
+    let internal = unsafe {
+        match multigpu_handle_to_internal(gen) {
+            Some(g) => g,
+            None => return WG_ERROR_INVALID_HANDLE as isize,
+        }
+    };
+
+    if output_buffer.is_null() {
+        set_error("Null output buffer".to_string());
+        return WG_ERROR_INVALID_PARAM as isize;
+    }
+
+    let mask = match &internal.mask {
+        Some(m) => m,
+        None => {
+            set_error("Generator not configured".to_string());
+            return WG_ERROR_NOT_CONFIGURED as isize;
+        }
+    };
+
+    // Check buffer size
+    let word_length = mask.len();
+    let bytes_per_word = match internal.output_format {
+        WG_FORMAT_NEWLINES => word_length + 1,
+        WG_FORMAT_FIXED_WIDTH => word_length + 1,
+        WG_FORMAT_PACKED => word_length,
+        _ => word_length + 1,
+    };
+    let required = (count as usize).saturating_mul(bytes_per_word);
+
+    if buffer_size < required {
+        set_error(format!(
+            "Buffer too small: need {} bytes, have {}",
+            required, buffer_size
+        ));
+        return WG_ERROR_BUFFER_TOO_SMALL as isize;
+    }
+
+    // Generate batch using multi-GPU
+    let result = internal.multi_gpu.generate_batch(
+        &internal.charsets,
+        mask,
+        start_idx,
+        count,
+        internal.output_format,
+    );
+
+    match result {
+        Ok(data) => {
+            // Copy to caller's buffer
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    data.as_ptr(),
+                    output_buffer,
+                    data.len()
+                );
+            }
+            data.len() as isize
+        }
+        Err(e) => {
+            set_error(format!("Multi-GPU generation failed: {}", e));
+            WG_ERROR_CUDA as isize
+        }
+    }
+}
+
+/// Get number of GPUs being used
+///
+/// # Arguments
+/// * `gen` - Multi-GPU generator handle
+///
+/// # Returns
+/// Number of GPUs, or -1 on error
+#[no_mangle]
+pub extern "C" fn wg_multigpu_get_device_count(gen: *mut MultiGpuGenerator) -> i32 {
+    let internal = unsafe {
+        match multigpu_handle_to_internal(gen) {
+            Some(g) => g,
+            None => return -1,
+        }
+    };
+
+    internal.multi_gpu.num_devices() as i32
+}
+
+/// Destroy multi-GPU generator and free all resources
+///
+/// # Safety
+/// Safe to call with NULL (no-op)
+#[no_mangle]
+pub extern "C" fn wg_multigpu_destroy(gen: *mut MultiGpuGenerator) {
+    if gen.is_null() {
+        return;
+    }
+
+    unsafe {
+        let _ = Box::from_raw(gen as *mut MultiGpuGeneratorInternal);
+        // Box drop automatically frees everything
     }
 }

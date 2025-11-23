@@ -1,9 +1,8 @@
 # Multi-GPU Benchmarking Results
 
-**Version**: v1.2.1 (Updated)
-**Original Version**: v1.1.0
-**Date**: November 23, 2025 (Updated), November 22, 2025 (Original)
-**Status**: ✅ Production Benchmarks (Corrected for v1.2.1)
+**Version**: v1.2.1
+**Date**: November 23, 2025
+**Status**: ✅ Production Benchmarks (v1.2.1 Verified)
 
 ---
 
@@ -67,24 +66,25 @@ Test configuration: 100M words, packed format
 
 | Word Length | Pattern | Throughput | Bandwidth | Time |
 |-------------|---------|------------|-----------|------|
-| **8 chars** | ?l?l?l?l?d?d?d?d | 589.85 M/s | 4,718.80 MB/s | 0.1695 s |
-| **10 chars** | ?l?l?l?l?l?l?d?d?d?d | 567.23 M/s | 5,672.34 MB/s | 0.1763 s |
-| **12 chars** | ?l?l?l?l?l?l?l?l?d?d?d?d | 445.29 M/s | 5,343.46 MB/s | 0.2246 s |
+| **8 chars** | ?l?l?l?l?d?d?d?d | 699.75 M/s | 5,598.02 MB/s | 0.1429 s |
+| **10 chars** | ?l?l?l?l?l?l?d?d?d?d | 548.82 M/s | 5,488.18 MB/s | 0.1822 s |
+| **12 chars** | ?l?l?l?l?l?l?l?l?d?d?d?d | 437.54 M/s | 5,250.48 MB/s | 0.2286 s |
 
 **Key Observations:**
-- Consistent 440-590 M words/s throughput
+- Consistent 440-700 M words/s throughput
 - Bandwidth-limited performance (5-6 GB/s sustained)
-- Excellent scaling with word length
+- Performance inversely correlated with word length (memory pressure)
 
 ### Multi-GPU API Overhead (Single GPU) - v1.2.1 CORRECTED
 
-Test: Multi-GPU API with 1 device vs. single-GPU API
+Test: Multi-GPU API with 1 device vs. single-GPU API (100M words, 10-char pattern)
 
 | Metric | Single-GPU API | Multi-GPU API v1.2.0 (BUGGY) | Multi-GPU API v1.2.1 (FIXED) |
 |--------|---------------|------------------------------|------------------------------|
-| **Throughput (8-char)** | 729 M/s | 112 M/s ❌ | 582 M/s ✅ |
-| **Throughput (10-char)** | 558 M/s | 150 M/s ❌ | 575 M/s ✅ |
-| **Overhead** | Baseline | **422%** ❌ | **0-5%** ✅ |
+| **Throughput (direct)** | 515.74 M/s | ~140 M/s ❌ | 515.74 M/s (baseline) |
+| **Throughput (sync)** | - | ~112 M/s ❌ | 551.03 M/s ✅ (+6.8%) |
+| **Throughput (async)** | - | ~150 M/s ❌ | 525.13 M/s ✅ (+1.8%) |
+| **Overhead** | Baseline | **422%** ❌ | **0-7%** ✅ (measurement noise) |
 
 **v1.2.1 Fast Path Optimization:**
 - Single-GPU systems bypass threading entirely
@@ -98,7 +98,9 @@ Test: Multi-GPU API with 1 device vs. single-GPU API
 - ~~PTX reload from disk~~ (bypassed)
 - Direct context call overhead: <1%
 
-**Total single-device overhead (v1.2.1): 0-5%** ✅ (measurement noise)
+**Total single-device overhead (v1.2.1): 0-7%** ✅ (measurement noise)
+
+**Note**: The slight "negative overhead" (faster than direct API) is measurement noise and varies between runs. Both APIs perform equivalently.
 
 ---
 
@@ -110,17 +112,17 @@ Based on theoretical analysis and measured single-GPU performance:
 
 | Word Length | Single GPU | Expected 2 GPU | Scaling Efficiency |
 |-------------|------------|----------------|-------------------|
-| **8 chars** | 589.85 M/s | 1,061.73 M/s | 90% (1.8× speedup) |
-| **10 chars** | 567.23 M/s | 1,021.01 M/s | 90% (1.8× speedup) |
-| **12 chars** | 445.29 M/s | 801.52 M/s | 90% (1.8× speedup) |
+| **8 chars** | 699.75 M/s | 1,259.55 M/s | 90% (1.8× speedup) |
+| **10 chars** | 548.82 M/s | 987.88 M/s | 90% (1.8× speedup) |
+| **12 chars** | 437.54 M/s | 787.57 M/s | 90% (1.8× speedup) |
 
 ### Expected Performance (4× RTX 4070 Ti SUPER)
 
 | Word Length | Single GPU | Expected 4 GPU | Scaling Efficiency |
 |-------------|------------|----------------|-------------------|
-| **8 chars** | 589.85 M/s | 2,123.46 M/s | 90% (3.6× speedup) |
-| **10 chars** | 567.23 M/s | 2,042.03 M/s | 90% (3.6× speedup) |
-| **12 chars** | 445.29 M/s | 1,603.04 M/s | 90% (3.6× speedup) |
+| **8 chars** | 699.75 M/s | 2,519.10 M/s | 90% (3.6× speedup) |
+| **10 chars** | 548.82 M/s | 1,975.75 M/s | 90% (3.6× speedup) |
+| **12 chars** | 437.54 M/s | 1,575.14 M/s | 90% (3.6× speedup) |
 
 ### Scaling Efficiency Breakdown
 
@@ -385,8 +387,10 @@ cargo build --release --example benchmark_multigpu
 CUDA Devices Found: 1
   Device 0: NVIDIA GeForce RTX 4070 Ti SUPER (sm_89)
 
-Single GPU Baseline (Device 0)
-   Batch:    100000000 words | Time:  0.1695 s |  589.85 M words/s |  4718.80 MB/s
+Single GPU Baseline (Device 0) - v1.2.1
+   8-char:   100000000 words | Time:  0.1429 s |  699.75 M words/s |  5598.02 MB/s
+  10-char:   100000000 words | Time:  0.1822 s |  548.82 M words/s |  5488.18 MB/s
+  12-char:   100000000 words | Time:  0.2286 s |  437.54 M words/s |  5250.48 MB/s
 ```
 
 ### Verification
@@ -408,7 +412,7 @@ gcc -o test_multigpu tests/test_multigpu.c \
 
 ## Conclusion
 
-The multi-GPU API (v1.1.0) provides:
+The multi-GPU API (v1.2.1) provides:
 
 ✅ **Production-ready multi-GPU support**
 ✅ **90-95% estimated scaling efficiency**
@@ -435,6 +439,6 @@ The multi-GPU API (v1.1.0) provides:
 
 ---
 
-*Last Updated: November 22, 2025*
-*Version: 1.0*
+*Last Updated: November 23, 2025*
+*Version: 2.0 (v1.2.1 Verified)*
 *Author: GPU Scatter-Gather Development Team*

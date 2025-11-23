@@ -49,6 +49,15 @@ This enables:
 
 ## Features
 
+### v1.3.0-dev (In Development) 🚀
+
+- ✅ **Persistent Worker Threads** - GPU contexts cached across batches (5-10% improvement for 2+ GPU systems)
+- ✅ **Zero Context Recreation Overhead** - Each worker thread owns its GPU context permanently
+- ✅ **Channel-Based Work Distribution** - Efficient task scheduling via std::sync::mpsc
+- ✅ **Graceful Shutdown** - Workers exit cleanly when context is dropped
+- ✅ **Single-GPU Fast Path Preserved** - 550-600 M words/s unchanged
+- ✅ **All 48 Tests Passing** - Full backward compatibility maintained
+
 ### v1.2.1 Release ✅ (Performance Fix)
 
 - ✅ **CRITICAL FIX**: Restored 4-5× performance for single-GPU multi-GPU API usage
@@ -76,7 +85,6 @@ This enables:
 
 - 🔜 Pinned memory with proper context management (10-15% additional improvement)
 - 🔜 Dynamic load balancing for heterogeneous GPUs (5-10% efficiency gain)
-- 🔜 Persistent thread pool for reduced latency on repeated calls
 - 🔜 Single-GPU memory coalescing optimization (2-3× potential speedup)
 - 🔜 Hybrid masks (static prefix/suffix + dynamic middle)
 - 🔜 Python/JavaScript bindings (PyPI, npm packages)
@@ -107,26 +115,50 @@ cargo test
 
 ### Usage
 
-#### CPU Mode (Current)
+> 📚 **See [EXAMPLES.md](EXAMPLES.md)** for a complete guide to all 16 examples with detailed explanations!
 
+#### Quick Start with Rust
+
+```rust
+use gpu_scatter_gather::gpu::GpuContext;
+use std::collections::HashMap;
+
+fn main() -> anyhow::Result<()> {
+    // Create GPU context
+    let gpu = GpuContext::new()?;
+
+    // Define character sets
+    let mut charsets = HashMap::new();
+    charsets.insert(0, b"abc".to_vec());
+    charsets.insert(1, b"123".to_vec());
+
+    // Create mask pattern: ?0?1
+    let mask = vec![0, 1];
+
+    // Generate 9 words
+    let output = gpu.generate_batch(&charsets, &mask, 0, 9, 2)?;
+
+    // Parse results
+    let word_length = mask.len();
+    for i in 0..(output.len() / word_length) {
+        let start = i * word_length;
+        let end = start + word_length;
+        let word = String::from_utf8_lossy(&output[start..end]);
+        println!("{}", word);
+    }
+
+    Ok(())
+}
+```
+
+**Run the beginner example:**
 ```bash
-# Generate simple wordlist
-gpu-scatter-gather -1 'abc' -2 '123' '?1?2'
+cargo run --release --example simple_basic
+```
 
-# Output:
-# a1
-# a2
-# b1
-# b2
-# c1
-# c2
-
-# Show keyspace size
-gpu-scatter-gather -1 'abc' -2 '123' '?1?2' --keyspace
-# Output: Keyspace size: 9
-
-# Use predefined charsets
-gpu-scatter-gather --lowercase --digits '?1?1?2?2'
+**Run the comprehensive API tour:**
+```bash
+cargo run --release --example simple_rust_api
 ```
 
 #### Multi-GPU C API (v1.1.0)

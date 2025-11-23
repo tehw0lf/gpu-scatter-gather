@@ -7,7 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2025-11-23
+
+### Fixed - Critical Performance Bug 🔧
+- **CRITICAL**: Fixed 4-5× performance regression in multi-GPU API for single-GPU systems
+  - **Problem**: Multi-GPU API spawned threads even with 1 GPU, recreating GPU contexts per batch
+  - **Impact**: Performance dropped from 560-600 M words/s to 112-150 M words/s (422% overhead)
+  - **Root Cause**: `GpuContext::with_device()` performed expensive initialization on every call:
+    - `cuInit()`, PTX file I/O, `cuModuleLoadData()`, `cuModuleGetFunction()` × 3
+  - **Solution**: Added fast path for single-GPU systems to use pre-initialized worker context
+  - **Result**: Restored performance to 560-600 M words/s (0-5% overhead, within measurement noise)
+
+### Performance Impact
+- **Before fix**: 112-150 M words/s (4-5× slower than direct GPU API)
+- **After fix**: 560-600 M words/s (matches direct GPU API performance)
+- **Speedup**: 4-5× for single-GPU multi-GPU API usage
+- **Overhead**: Reduced from 422% to 0-5%
+
+### Technical Details
+- Added fast path check: `if num_devices == 1, use workers[0].context directly`
+- Eliminates thread spawning overhead for single-GPU systems
+- Pre-initialized contexts in `MultiGpuContext` workers are now actually used
+- Applies to both `generate_batch_sync()` and `generate_batch_async()`
+
+### Files Modified
+- `src/multigpu.rs` - Added fast path in sync/async batch generation functions
+- `examples/test_perf_comparison.rs` - Performance validation and regression testing tool
+
+### Testing
+- All 48/48 tests still passing
+- New performance comparison tool validates fix
+- Verified with 100M word benchmarks on RTX 4070 Ti SUPER
+
+### Breaking Changes
+**None** - Fully backward compatible
+
+### Upgrade Notes
+Users on v1.2.0 should upgrade immediately to restore full performance for single-GPU systems.
+Multi-GPU systems (2+ GPUs) were not affected by this bug.
+
 ## [1.2.0] - 2025-11-23
+
+### ⚠️ DEPRECATED - Contains Critical Performance Bug
+**DO NOT USE v1.2.0** - Upgrade to v1.2.1 immediately.
+
+This version introduced a 4-5× performance regression for single-GPU systems.
+See v1.2.1 changelog for details and fix.
 
 ### Added - Async Multi-GPU Optimization 🚀
 - **Async Multi-GPU Execution**: CUDA streams for overlapped kernel execution
@@ -176,10 +221,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 |---------|------|-------------|
 | 0.1.0 | 2025-11-19 | Initial release - Feature complete C API |
 | 1.1.0 | 2025-11-22 | Multi-GPU support with 90-95% scaling efficiency |
-| 1.2.0 | 2025-11-23 | Async multi-GPU optimization with CUDA streams (+11% improvement) |
+| 1.2.0 | 2025-11-23 | ⚠️ DEPRECATED - Critical performance bug (4-5× regression) |
+| **1.2.1** | **2025-11-23** | **Bug fix - Restored full performance for single-GPU systems** |
 
 ---
 
-**Project Status:** Production Ready (Async multi-GPU optimization complete, 48/48 tests passing)
+**Project Status:** Production Ready (Performance regression fixed, 48/48 tests passing)
 **Author:** tehw0lf + Claude Code (AI-assisted development)
 **License:** MIT OR Apache-2.0

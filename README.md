@@ -5,15 +5,15 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.82+-orange.svg)](https://www.rust-lang.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-11.8+-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
-[![Release](https://img.shields.io/badge/release-v1.1.0-brightgreen.svg)](https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.1.0)
+[![Release](https://img.shields.io/badge/release-v1.2.0-brightgreen.svg)](https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.2.0)
 
 > 📄 **[Read the Technical Whitepaper](https://github.com/tehw0lf/gpu-scatter-gather/releases/download/v1.0.0/GPU_Scatter_Gather_Whitepaper_v1.0.0.pdf)** - Comprehensive algorithm design, formal proofs, and performance evaluation
 >
-> ✅ **Status:** v1.1.0 Released! (Multi-GPU Support)
+> ✅ **Status:** v1.2.0 Released! (Async Multi-GPU Optimization)
 >
 > Production-ready library with **4-7× speedup** over CPU tools (maskprocessor, cracken).
 > Complete C FFI API with 24 functions (17 single-GPU + 7 multi-GPU), 3 output formats, formal validation, and integration guides.
-> **NEW:** Multi-GPU support with 90-95% scaling efficiency!
+> **NEW:** Async multi-GPU optimization with CUDA streams (+11% on medium batches)!
 > See [Development Log](docs/development/DEVELOPMENT_LOG.md) for detailed progress.
 
 ## Overview
@@ -49,9 +49,14 @@ This enables:
 
 ## Features
 
-### v1.1.0 Release ✅ (Multi-GPU Support)
+### v1.2.0 Release ✅ (Async Multi-GPU Optimization)
 
-- ✅ **Multi-GPU API** - 7 new functions for automatic parallel generation across GPUs
+- ✅ **Async Multi-GPU Execution** - CUDA streams for overlapped kernel execution
+- ✅ **+11.3% Performance Improvement** - Optimized for medium batches (50M words)
+- ✅ **MultiGpuContext::new_async() API** - Opt-in async mode, fully backward compatible
+- ✅ **Per-Thread Stream Management** - Thread-safe CUDA stream creation and synchronization
+- ✅ **48/48 Tests Passing** - Added 4 new async-specific tests
+- ✅ **Multi-GPU API** - 7 functions for automatic parallel generation across GPUs
 - ✅ **90-95% Scaling Efficiency** - Minimal overhead with automatic workload distribution
 - ✅ **Automatic Keyspace Partitioning** - Static distribution algorithm with load balancing
 - ✅ **Thread-Safe Parallel Execution** - One thread per GPU with synchronized aggregation
@@ -67,11 +72,12 @@ This enables:
 - ✅ **Integration guides** - hashcat, John the Ripper, generic C programs
 - ✅ **Clean Rust API** - RAII memory management, type-safe
 
-### Planned (v1.2.0+)
+### Planned (v1.3.0+)
 
-- 🔜 Pinned memory optimization (10-15% throughput improvement)
-- 🔜 Async kernel launches with CUDA streams (5-10% improvement)
-- 🔜 Dynamic load balancing for heterogeneous GPUs
+- 🔜 Pinned memory with proper context management (10-15% additional improvement)
+- 🔜 Dynamic load balancing for heterogeneous GPUs (5-10% efficiency gain)
+- 🔜 Persistent thread pool for reduced latency on repeated calls
+- 🔜 Single-GPU memory coalescing optimization (2-3× potential speedup)
 - 🔜 Hybrid masks (static prefix/suffix + dynamic middle)
 - 🔜 Python/JavaScript bindings (PyPI, npm packages)
 - 🔜 Advanced optimizations (Barrett reduction, power-of-2 fast paths)

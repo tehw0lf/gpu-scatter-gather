@@ -52,7 +52,7 @@ fn main() -> Result<()> {
     // Test 3: Multi-GPU async (1 device)
     println!("\n🔷 Test 3: MultiGpuContext::new_async() (async, 1 GPU)");
     let (duration3, throughput3, output_len3) = {
-        let ctx_async = MultiGpuContext::new_async()?;
+        let mut ctx_async = MultiGpuContext::new_async()?;
         let start = Instant::now();
         let output3 = ctx_async.generate_batch(&charsets, &mask, 0, batch_size, 2)?;
         let duration3 = start.elapsed();

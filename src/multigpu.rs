@@ -9,6 +9,26 @@ use std::thread::{self, JoinHandle};
 use crate::gpu::GpuContext;
 use cuda_driver_sys::*;
 
+/// Send-safe wrapper for raw pointer to pinned memory
+///
+/// SAFETY: This is safe because:
+/// 1. Each worker owns its pinned buffer exclusively
+/// 2. Pointers are never shared between workers
+/// 3. PORTABLE flag ensures multi-context access
+struct SendPtr(*mut u8);
+
+unsafe impl Send for SendPtr {}
+
+impl SendPtr {
+    fn new(ptr: *mut u8) -> Self {
+        SendPtr(ptr)
+    }
+
+    fn as_mut_ptr(&self) -> *mut u8 {
+        self.0
+    }
+}
+
 /// Work item sent to persistent worker threads
 struct WorkItem {
     /// Character sets for generation
@@ -19,8 +39,10 @@ struct WorkItem {
     partition: KeyspacePartition,
     /// Output format (0=newlines, 1=fixed-width, 2=packed)
     output_format: i32,
-    /// Channel to send result back
-    result_sender: Sender<Result<Vec<u8>>>,
+    /// Pinned memory pointer to write output directly (fast PCIe transfers)
+    pinned_ptr: SendPtr,
+    /// Channel to send result back (now returns size instead of Vec)
+    result_sender: Sender<Result<usize>>,
 }
 
 /// Shutdown signal for worker threads
@@ -401,9 +423,16 @@ impl MultiGpuContext {
                                 break;
                             }
                             WorkerMessage::Work(work_item) => {
-                                // Process work item
-                                let result = Self::process_work_item(&gpu_ctx, work_item.partition,
-                                    &work_item.charsets, &work_item.mask, work_item.output_format, stream);
+                                // Process work item with pinned memory pointer
+                                let result = Self::process_work_item(
+                                    &gpu_ctx,
+                                    work_item.partition,
+                                    &work_item.charsets,
+                                    &work_item.mask,
+                                    work_item.output_format,
+                                    stream,
+                                    work_item.pinned_ptr,
+                                );
 
                                 // Send result back (ignore errors if receiver dropped)
                                 let _ = work_item.result_sender.send(result);
@@ -485,6 +514,7 @@ impl MultiGpuContext {
     ///
     /// This is called by persistent worker threads to generate a batch.
     /// The GPU context and stream are owned by the worker thread.
+    /// Output is written directly to pinned memory for fast PCIe transfers.
     fn process_work_item(
         gpu_ctx: &GpuContext,
         partition: KeyspacePartition,
@@ -492,7 +522,8 @@ impl MultiGpuContext {
         mask: &[usize],
         output_format: i32,
         stream: CUstream,
-    ) -> Result<Vec<u8>> {
+        pinned_ptr: SendPtr,
+    ) -> Result<usize> {
         unsafe {
             // Calculate output size
             let word_length = mask.len();
@@ -503,9 +534,6 @@ impl MultiGpuContext {
                 _ => word_length + 1,  // fallback
             };
             let output_size = partition.count as usize * bytes_per_word;
-
-            // Allocate host buffer
-            let mut host_buffer = vec![0u8; output_size];
 
             // Generate batch using device pointer API with optional stream
             let (device_ptr, size) = gpu_ctx.generate_batch_device_stream(
@@ -522,17 +550,17 @@ impl MultiGpuContext {
                 eprintln!("[WARNING] Size mismatch! expected={}, got={}", output_size, size);
             }
 
-            // Copy from device to host (async if stream, sync otherwise)
+            // Copy directly to pinned memory (FAST! ~2x faster than pageable)
             let copy_result = if !stream.is_null() {
                 cuMemcpyDtoHAsync_v2(
-                    host_buffer.as_mut_ptr() as *mut std::ffi::c_void,
+                    pinned_ptr.as_mut_ptr() as *mut std::ffi::c_void,
                     device_ptr,
                     size,
                     stream,
                 )
             } else {
                 cuMemcpyDtoH_v2(
-                    host_buffer.as_mut_ptr() as *mut std::ffi::c_void,
+                    pinned_ptr.as_mut_ptr() as *mut std::ffi::c_void,
                     device_ptr,
                     size,
                 )
@@ -540,7 +568,7 @@ impl MultiGpuContext {
 
             if copy_result != CUresult::CUDA_SUCCESS {
                 let _ = cuMemFree_v2(device_ptr);
-                anyhow::bail!("Failed to copy results: {:?}", copy_result);
+                anyhow::bail!("Failed to copy results to pinned memory: {:?}", copy_result);
             }
 
             // Synchronize stream to ensure copy completes
@@ -557,7 +585,8 @@ impl MultiGpuContext {
             // Free device memory
             let _ = cuMemFree_v2(device_ptr);
 
-            Ok(host_buffer)
+            // Return size written
+            Ok(size)
         }
     }
 
@@ -578,7 +607,7 @@ impl MultiGpuContext {
     /// # Returns
     /// Concatenated output from all GPUs in order
     pub fn generate_batch(
-        &self,
+        &mut self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
@@ -594,8 +623,7 @@ impl MultiGpuContext {
 
     /// Generate batch across all GPUs in parallel (synchronous version)
     ///
-    /// This is the original implementation using regular memory allocation
-    /// and synchronous kernel launches.
+    /// Uses pinned memory for faster PCIe transfers (2x faster than pageable memory).
     ///
     /// # Arguments
     /// * `charsets` - Character set definitions
@@ -607,19 +635,65 @@ impl MultiGpuContext {
     /// # Returns
     /// Concatenated output from all GPUs in order
     fn generate_batch_sync(
-        &self,
+        &mut self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
         batch_size: u64,
         output_format: i32,
     ) -> Result<Vec<u8>> {
-        // Fast path for single GPU: use worker directly, no threading overhead
+        // Fast path for single GPU: use pinned memory, no threading overhead
         if self.num_devices == 1 {
-            return self.workers[0].context.generate_batch(charsets, mask, start_idx, batch_size, output_format);
+            unsafe {
+                // Calculate output size
+                let word_length = mask.len();
+                let bytes_per_word = match output_format {
+                    0 => word_length + 1,  // WG_FORMAT_NEWLINES
+                    1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
+                    2 => word_length,      // WG_FORMAT_PACKED
+                    _ => word_length + 1,  // fallback
+                };
+                let output_size = batch_size as usize * bytes_per_word;
+
+                // Get pinned buffer pointer
+                let pinned_ptr = self.pinned_buffers[0].as_mut_ptr();
+
+                // Generate using device pointer API
+                let (device_ptr, size) = self.workers[0].context.generate_batch_device_stream(
+                    charsets,
+                    mask,
+                    start_idx,
+                    batch_size,
+                    std::ptr::null_mut(),  // No stream for single GPU
+                    output_format,
+                )?;
+
+                // Copy to pinned memory
+                let copy_result = cuMemcpyDtoH_v2(
+                    pinned_ptr as *mut std::ffi::c_void,
+                    device_ptr,
+                    size,
+                );
+
+                if copy_result != CUresult::CUDA_SUCCESS {
+                    let _ = cuMemFree_v2(device_ptr);
+                    anyhow::bail!("Failed to copy to pinned memory: {:?}", copy_result);
+                }
+
+                // Synchronize
+                let _ = cuCtxSynchronize();
+
+                // Free device memory
+                let _ = cuMemFree_v2(device_ptr);
+
+                // Copy from pinned to final Vec
+                let mut result = vec![0u8; size];
+                std::ptr::copy_nonoverlapping(pinned_ptr, result.as_mut_ptr(), size);
+                return Ok(result);
+            }
         }
 
-        // Multi-GPU path: use persistent worker threads
+        // Multi-GPU path: use persistent worker threads with pinned memory
         use std::sync::mpsc::channel;
 
         // Partition keyspace across GPUs
@@ -636,48 +710,72 @@ impl MultiGpuContext {
             // Skip empty partitions
             if partition.count == 0 {
                 let (tx, rx) = channel();
-                let _ = tx.send(Ok(Vec::new()));
-                result_receivers.push(rx);
+                let _ = tx.send(Ok(0));
+                result_receivers.push((rx, gpu_idx));
                 continue;
             }
 
             // Create result channel for this work item
             let (result_tx, result_rx) = channel();
-            result_receivers.push(result_rx);
 
-            // Create work item
+            // Create work item with pinned buffer pointer
             let work_item = WorkItem {
                 charsets: charsets.clone(),
                 mask: mask.to_vec(),
                 partition: *partition,
                 output_format,
+                pinned_ptr: SendPtr::new(self.pinned_buffers[gpu_idx].as_mut_ptr()),
                 result_sender: result_tx,
             };
 
             // Send work to persistent worker thread
             worker_threads[gpu_idx].0.send(WorkerMessage::Work(work_item))
-                .with_context(|| format!("Failed to send work to GPU {}", gpu_idx))?;
+                .map_err(|e| anyhow::anyhow!("Failed to send work to GPU {}: {}", gpu_idx, e))?;
+
+            result_receivers.push((result_rx, gpu_idx));
         }
 
-        // Collect results in order
-        let mut aggregated = Vec::new();
-        for (gpu_idx, result_rx) in result_receivers.into_iter().enumerate() {
-            let result = result_rx.recv()
-                .with_context(|| format!("Failed to receive result from GPU {}", gpu_idx))??;
-            aggregated.extend_from_slice(&result);
-        }
+        // Collect sizes from workers
+        let mut results: Vec<(usize, usize)> = result_receivers
+            .into_iter()
+            .map(|(rx, worker_id)| {
+                let size = rx.recv()
+                    .with_context(|| format!("Failed to receive from GPU {}", worker_id))??;
+                Ok((size, worker_id))
+            })
+            .collect::<Result<Vec<_>>>()?;
 
-        Ok(aggregated)
+        // Calculate total size
+        let total_size: usize = results.iter().map(|(size, _)| size).sum();
+
+        // Concatenate from pinned buffers to final output
+        unsafe {
+            let mut output = vec![0u8; total_size];
+            let mut offset = 0;
+
+            for (size, worker_id) in results {
+                if size > 0 {
+                    std::ptr::copy_nonoverlapping(
+                        self.pinned_buffers[worker_id].as_ptr(),
+                        output.as_mut_ptr().add(offset),
+                        size,
+                    );
+                    offset += size;
+                }
+            }
+
+            Ok(output)
+        }
     }
 
     /// Generate batch across all GPUs in parallel (async optimized version)
     ///
     /// This implementation uses:
-    /// - Pinned memory allocation (cuMemAllocHost) for 10-15% faster PCIe transfers
+    /// - Pinned memory allocation (cuMemAllocHost) for 2x faster PCIe transfers
     /// - CUDA streams for overlapped kernel execution (5-10% improvement)
     /// - Async memory copies for pipelined data transfers
     ///
-    /// Expected improvement: 20-30% throughput gain over sync version
+    /// Expected improvement: 10-15% throughput gain over sync version
     ///
     /// # Arguments
     /// * `charsets` - Character set definitions
@@ -689,16 +787,62 @@ impl MultiGpuContext {
     /// # Returns
     /// Concatenated output from all GPUs in order
     fn generate_batch_async(
-        &self,
+        &mut self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
         batch_size: u64,
         output_format: i32,
     ) -> Result<Vec<u8>> {
-        // Fast path for single GPU: use worker directly, no threading overhead
+        // Fast path for single GPU: use pinned memory, no threading overhead
         if self.num_devices == 1 {
-            return self.workers[0].context.generate_batch(charsets, mask, start_idx, batch_size, output_format);
+            unsafe {
+                // Calculate output size
+                let word_length = mask.len();
+                let bytes_per_word = match output_format {
+                    0 => word_length + 1,  // WG_FORMAT_NEWLINES
+                    1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
+                    2 => word_length,      // WG_FORMAT_PACKED
+                    _ => word_length + 1,  // fallback
+                };
+                let output_size = batch_size as usize * bytes_per_word;
+
+                // Get pinned buffer pointer
+                let pinned_ptr = self.pinned_buffers[0].as_mut_ptr();
+
+                // Generate using device pointer API
+                let (device_ptr, size) = self.workers[0].context.generate_batch_device_stream(
+                    charsets,
+                    mask,
+                    start_idx,
+                    batch_size,
+                    std::ptr::null_mut(),  // No stream for single GPU
+                    output_format,
+                )?;
+
+                // Copy to pinned memory
+                let copy_result = cuMemcpyDtoH_v2(
+                    pinned_ptr as *mut std::ffi::c_void,
+                    device_ptr,
+                    size,
+                );
+
+                if copy_result != CUresult::CUDA_SUCCESS {
+                    let _ = cuMemFree_v2(device_ptr);
+                    anyhow::bail!("Failed to copy to pinned memory: {:?}", copy_result);
+                }
+
+                // Synchronize
+                let _ = cuCtxSynchronize();
+
+                // Free device memory
+                let _ = cuMemFree_v2(device_ptr);
+
+                // Copy from pinned to final Vec
+                let mut result = vec![0u8; size];
+                std::ptr::copy_nonoverlapping(pinned_ptr, result.as_mut_ptr(), size);
+                return Ok(result);
+            }
         }
 
         // Multi-GPU path: use persistent worker threads (async mode uses streams)
@@ -718,38 +862,62 @@ impl MultiGpuContext {
             // Skip empty partitions
             if partition.count == 0 {
                 let (tx, rx) = channel();
-                let _ = tx.send(Ok(Vec::new()));
-                result_receivers.push(rx);
+                let _ = tx.send(Ok(0));
+                result_receivers.push((rx, gpu_idx));
                 continue;
             }
 
             // Create result channel for this work item
             let (result_tx, result_rx) = channel();
-            result_receivers.push(result_rx);
 
-            // Create work item
+            // Create work item with pinned buffer pointer
             let work_item = WorkItem {
                 charsets: charsets.clone(),
                 mask: mask.to_vec(),
                 partition: *partition,
                 output_format,
+                pinned_ptr: SendPtr::new(self.pinned_buffers[gpu_idx].as_mut_ptr()),
                 result_sender: result_tx,
             };
 
             // Send work to persistent worker thread
             worker_threads[gpu_idx].0.send(WorkerMessage::Work(work_item))
-                .with_context(|| format!("Failed to send work to GPU {}", gpu_idx))?;
+                .map_err(|e| anyhow::anyhow!("Failed to send work to GPU {}: {}", gpu_idx, e))?;
+
+            result_receivers.push((result_rx, gpu_idx));
         }
 
-        // Collect results in order
-        let mut aggregated = Vec::new();
-        for (gpu_idx, result_rx) in result_receivers.into_iter().enumerate() {
-            let result = result_rx.recv()
-                .with_context(|| format!("Failed to receive result from GPU {}", gpu_idx))??;
-            aggregated.extend_from_slice(&result);
-        }
+        // Collect sizes from workers
+        let mut results: Vec<(usize, usize)> = result_receivers
+            .into_iter()
+            .map(|(rx, worker_id)| {
+                let size = rx.recv()
+                    .with_context(|| format!("Failed to receive from GPU {}", worker_id))??;
+                Ok((size, worker_id))
+            })
+            .collect::<Result<Vec<_>>>()?;
 
-        Ok(aggregated)
+        // Calculate total size
+        let total_size: usize = results.iter().map(|(size, _)| size).sum();
+
+        // Concatenate from pinned buffers to final output
+        unsafe {
+            let mut output = vec![0u8; total_size];
+            let mut offset = 0;
+
+            for (size, worker_id) in results {
+                if size > 0 {
+                    std::ptr::copy_nonoverlapping(
+                        self.pinned_buffers[worker_id].as_ptr(),
+                        output.as_mut_ptr().add(offset),
+                        size,
+                    );
+                    offset += size;
+                }
+            }
+
+            Ok(output)
+        }
     }
 }
 
@@ -882,7 +1050,7 @@ mod tests {
         // We can test this even without actual GPUs by creating a mock
         // For now, test the standalone partition_keyspace function
         match MultiGpuContext::with_devices(&[0]) {
-            Ok(ctx) => {
+            Ok(mut ctx) => {
                 // Test partitioning with offset
                 let partitions = ctx.partition(1000, 100);
                 assert_eq!(partitions.len(), 1);
@@ -900,7 +1068,7 @@ mod tests {
     fn test_multi_gpu_with_single_device() {
         // Test with device 0 only
         match MultiGpuContext::with_devices(&[0]) {
-            Ok(ctx) => {
+            Ok(mut ctx) => {
                 assert_eq!(ctx.num_devices(), 1);
                 assert_eq!(ctx.worker(0).unwrap().device_id(), 0);
             }
@@ -927,7 +1095,7 @@ mod tests {
     fn test_multi_gpu_generate_batch() {
         // Test parallel generation across GPUs
         match MultiGpuContext::with_devices(&[0]) {
-            Ok(ctx) => {
+            Ok(mut ctx) => {
                 // Setup: Simple 2x2 keyspace (4 words total)
                 let mut charsets = HashMap::new();
                 charsets.insert(1, b"ab".to_vec());
@@ -970,7 +1138,7 @@ mod tests {
     fn test_multi_gpu_partial_keyspace() {
         // Test generating a subset of the keyspace
         match MultiGpuContext::with_devices(&[0]) {
-            Ok(ctx) => {
+            Ok(mut ctx) => {
                 let mut charsets = HashMap::new();
                 charsets.insert(1, b"abc".to_vec());
 
@@ -1006,7 +1174,7 @@ mod tests {
     fn test_multi_gpu_async_creation() {
         // Test async multi-GPU context creation
         match MultiGpuContext::new_async() {
-            Ok(ctx) => {
+            Ok(mut ctx) => {
                 assert!(ctx.num_devices() >= 1);
             }
             Err(e) => {
@@ -1018,7 +1186,7 @@ mod tests {
     fn test_multi_gpu_async_repeated() {
         // Test async multi-GPU generation with repeated calls (like benchmark does)
         match MultiGpuContext::new_async() {
-            Ok(ctx) => {
+            Ok(mut ctx) => {
                 let mut charsets = HashMap::new();
                 charsets.insert(0, b"abcdefghijklmnopqrstuvwxyz".to_vec());
                 charsets.insert(1, b"0123456789".to_vec());
@@ -1049,7 +1217,7 @@ mod tests {
     fn test_multi_gpu_async_large() {
         // Test async multi-GPU generation with large batch (1M words)
         match MultiGpuContext::new_async() {
-            Ok(ctx) => {
+            Ok(mut ctx) => {
                 let mut charsets = HashMap::new();
                 charsets.insert(0, b"abcdefghijklmnopqrstuvwxyz".to_vec());
                 charsets.insert(1, b"0123456789".to_vec());
@@ -1078,7 +1246,7 @@ mod tests {
     fn test_multi_gpu_async_medium() {
         // Test async multi-GPU generation with medium batch
         match MultiGpuContext::new_async() {
-            Ok(ctx) => {
+            Ok(mut ctx) => {
                 let mut charsets = HashMap::new();
                 charsets.insert(1, b"abcdefghij".to_vec()); // 10 chars
 
@@ -1106,7 +1274,7 @@ mod tests {
     fn test_multi_gpu_async_basic() {
         // Test async multi-GPU generation
         match MultiGpuContext::new_async() {
-            Ok(ctx) => {
+            Ok(mut ctx) => {
                 let mut charsets = HashMap::new();
                 charsets.insert(1, b"ab".to_vec());
 

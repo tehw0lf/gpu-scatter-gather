@@ -149,7 +149,7 @@ fn main() -> Result<()> {
 
 fn run_sync_benchmark(charsets: &HashMap<usize, Vec<u8>>, mask: &[usize], batch_size: u64) -> Result<(std::time::Duration, u64)> {
     // Create sync multi-GPU context
-    let ctx = MultiGpuContext::new()?;
+    let mut ctx = MultiGpuContext::new()?;
 
     let start = Instant::now();
     let output = ctx.generate_batch(charsets, mask, 0, batch_size, 2)?; // Format 2 = PACKED
@@ -163,7 +163,7 @@ fn run_sync_benchmark(charsets: &HashMap<usize, Vec<u8>>, mask: &[usize], batch_
 
 fn run_async_benchmark(charsets: &HashMap<usize, Vec<u8>>, mask: &[usize], batch_size: u64) -> Result<(std::time::Duration, u64)> {
     // Create async multi-GPU context (with pinned memory + streams)
-    let ctx = MultiGpuContext::new_async()?;
+    let mut ctx = MultiGpuContext::new_async()?;
 
     let start = Instant::now();
     let output = ctx.generate_batch(charsets, mask, 0, batch_size, 2)?; // Format 2 = PACKED

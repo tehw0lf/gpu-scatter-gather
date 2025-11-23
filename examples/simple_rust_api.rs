@@ -88,7 +88,7 @@ fn example_2_multi_gpu() -> Result<()> {
     println!("📋 Example 2: Multi-GPU Context\n");
 
     // Create multi-GPU context (automatically detects and uses all GPUs)
-    let multi_gpu = MultiGpuContext::new()?;
+    let mut multi_gpu = MultiGpuContext::new()?;
     let num_gpus = multi_gpu.num_devices();
 
     println!("🔍 Detected {} GPU(s)", num_gpus);

@@ -233,7 +233,7 @@ fn benchmark_multi_gpu(
     word_length: usize,
     num_devices: usize,
 ) -> Result<f64> {
-    let multi_gpu = MultiGpuContext::new()?;
+    let mut multi_gpu = MultiGpuContext::new()?;
 
     // Use wall-clock time since multi-GPU spans multiple CUDA contexts
     let start = Instant::now();

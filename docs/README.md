@@ -69,14 +69,21 @@ Historical documents preserved for reference:
 
 ## Quick Navigation
 
+### For New Users ⭐
+Start here:
+1. **[QUICKSTART.md](../QUICKSTART.md)** - Get running in 5 minutes
+2. **[EXAMPLES.md](../EXAMPLES.md)** - Guide to all 16 examples
+3. **[FAQ.md](../FAQ.md)** - Common questions and troubleshooting
+4. Main `README.md` (project root) - Complete overview
+
 ### For Users
-Start with:
-1. Main `README.md` (project root)
-2. Tool-specific integration:
+Integration and usage:
+1. Tool-specific integration:
    - `guides/HASHCAT_INTEGRATION.md` - For hashcat users
    - `guides/JTR_INTEGRATION.md` - For John the Ripper users
    - `guides/INTEGRATION_GUIDE.md` - For custom tool developers
-3. `api/C_API_SPECIFICATION.md` - API reference
+2. `api/C_API_SPECIFICATION.md` - API reference
+3. **[FAQ.md](../FAQ.md)** - Troubleshooting and common questions
 
 ### For Contributors
 Start with:
@@ -131,6 +138,14 @@ Primary documents:
 
 ## Recent Changes
 
+**2025-11-23**: User-Facing Documentation Expansion ⭐
+- Added **[QUICKSTART.md](../QUICKSTART.md)** - 5-minute setup guide for new users
+- Added **[FAQ.md](../FAQ.md)** - Comprehensive FAQ with troubleshooting
+- Added **[EXAMPLES.md](../EXAMPLES.md)** - Complete guide to all 16 examples
+- Created 2 beginner-friendly examples (`simple_basic.rs`, `simple_rust_api.rs`)
+- Updated README with prominent links to new guides
+- Improved onboarding experience for new users
+
 **2025-11-20**: v1.0.0 Release Documentation
 - Added **HASHCAT_INTEGRATION.md** - Complete integration guide with 3 patterns
 - Added **JTR_INTEGRATION.md** - John the Ripper integration guide
@@ -145,4 +160,4 @@ Primary documents:
 
 ---
 
-*Last Updated: November 20, 2025*
+*Last Updated: November 23, 2025*

@@ -93,6 +93,10 @@ This enables:
 
 ## Quick Start
 
+> ⚡ **New to the project?** See [QUICKSTART.md](QUICKSTART.md) for a 5-minute setup guide!
+>
+> ❓ **Have questions?** Check [FAQ.md](FAQ.md) for common questions and troubleshooting.
+
 ### Prerequisites
 
 - **Rust 1.82+** - [Install Rust](https://rustup.rs/)
@@ -109,8 +113,8 @@ cd gpu-scatter-gather
 # Build the project (compiles CUDA kernels automatically)
 cargo build --release
 
-# Run tests to verify installation
-cargo test
+# Run your first example
+cargo run --release --example simple_basic
 ```
 
 ### Usage

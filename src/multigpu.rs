@@ -4,26 +4,29 @@
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;
+use std::sync::mpsc::{channel, Sender};
+use std::thread::{self, JoinHandle};
 use crate::gpu::GpuContext;
 use cuda_driver_sys::*;
 
-/// Wrapper for raw pointer to make it Send (unsafe but needed for thread spawn)
-#[derive(Clone, Copy)]
-struct SendPtr<T>(*mut T);
-unsafe impl<T> Send for SendPtr<T> {}
+/// Work item sent to persistent worker threads
+struct WorkItem {
+    /// Character sets for generation
+    charsets: HashMap<usize, Vec<u8>>,
+    /// Mask pattern
+    mask: Vec<usize>,
+    /// Keyspace partition for this worker
+    partition: KeyspacePartition,
+    /// Output format (0=newlines, 1=fixed-width, 2=packed)
+    output_format: i32,
+    /// Channel to send result back
+    result_sender: Sender<Result<Vec<u8>>>,
+}
 
-impl<T> SendPtr<T> {
-    fn new(ptr: *mut T) -> Self {
-        SendPtr(ptr)
-    }
-
-    fn as_ptr(&self) -> *mut T {
-        self.0
-    }
-
-    fn is_null(&self) -> bool {
-        self.0.is_null()
-    }
+/// Shutdown signal for worker threads
+enum WorkerMessage {
+    Work(WorkItem),
+    Shutdown,
 }
 
 /// Keyspace partition for a single GPU
@@ -170,12 +173,15 @@ impl Drop for GpuWorker {
 
 /// Multi-GPU context for parallel wordlist generation
 pub struct MultiGpuContext {
-    /// Workers for each GPU
+    /// Workers for each GPU (used for single-GPU fast path)
     workers: Vec<GpuWorker>,
     /// Number of devices
     num_devices: usize,
     /// Enable async kernel launches with CUDA streams
     async_mode: bool,
+    /// Persistent worker threads (for multi-GPU path)
+    /// Each tuple: (work_sender, thread_handle)
+    worker_threads: Option<Vec<(Sender<WorkerMessage>, JoinHandle<()>)>>,
 }
 
 impl MultiGpuContext {
@@ -249,10 +255,78 @@ impl MultiGpuContext {
 
         let num_devices = workers.len();
 
+        // For multi-GPU systems (2+), spawn persistent worker threads
+        let worker_threads = if num_devices >= 2 {
+            let mut threads = Vec::with_capacity(num_devices);
+
+            for device_id in device_ids.iter().take(num_devices) {
+                let (work_sender, work_receiver) = channel::<WorkerMessage>();
+                let device_id = *device_id;
+                let use_async = async_mode;
+
+                let handle = thread::spawn(move || {
+                    // Create GPU context ONCE for this worker thread
+                    let gpu_ctx = match GpuContext::with_device(device_id) {
+                        Ok(ctx) => ctx,
+                        Err(e) => {
+                            eprintln!("Worker thread for GPU {} failed to create context: {}", device_id, e);
+                            return;
+                        }
+                    };
+
+                    // Create CUDA stream ONCE if async mode
+                    let stream = if use_async {
+                        unsafe {
+                            let mut stream_ptr: CUstream = std::ptr::null_mut();
+                            let result = cuStreamCreate(&mut stream_ptr, 0);
+                            if result != CUresult::CUDA_SUCCESS {
+                                eprintln!("Worker thread for GPU {} failed to create stream: {:?}", device_id, result);
+                                return;
+                            }
+                            stream_ptr
+                        }
+                    } else {
+                        std::ptr::null_mut()
+                    };
+
+                    // Worker loop: process work items until shutdown
+                    while let Ok(msg) = work_receiver.recv() {
+                        match msg {
+                            WorkerMessage::Shutdown => {
+                                // Cleanup and exit
+                                unsafe {
+                                    if !stream.is_null() {
+                                        let _ = cuStreamSynchronize(stream);
+                                        let _ = cuStreamDestroy_v2(stream);
+                                    }
+                                }
+                                break;
+                            }
+                            WorkerMessage::Work(work_item) => {
+                                // Process work item
+                                let result = Self::process_work_item(&gpu_ctx, work_item.partition,
+                                    &work_item.charsets, &work_item.mask, work_item.output_format, stream);
+
+                                // Send result back (ignore errors if receiver dropped)
+                                let _ = work_item.result_sender.send(result);
+                            }
+                        }
+                    }
+                });
+
+                threads.push((work_sender, handle));
+            }
+
+            Some(threads)
+        } else {
+            None  // Single GPU uses fast path
+        };
+
         Ok(Self {
             workers,
             num_devices,
             async_mode,
+            worker_threads,
         })
     }
 
@@ -297,6 +371,86 @@ impl MultiGpuContext {
             .into_iter()
             .map(|p| KeyspacePartition::new(start_idx + p.start_idx, p.count))
             .collect()
+    }
+
+    /// Process a work item on a persistent worker thread
+    ///
+    /// This is called by persistent worker threads to generate a batch.
+    /// The GPU context and stream are owned by the worker thread.
+    fn process_work_item(
+        gpu_ctx: &GpuContext,
+        partition: KeyspacePartition,
+        charsets: &HashMap<usize, Vec<u8>>,
+        mask: &[usize],
+        output_format: i32,
+        stream: CUstream,
+    ) -> Result<Vec<u8>> {
+        unsafe {
+            // Calculate output size
+            let word_length = mask.len();
+            let bytes_per_word = match output_format {
+                0 => word_length + 1,  // WG_FORMAT_NEWLINES
+                1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
+                2 => word_length,      // WG_FORMAT_PACKED
+                _ => word_length + 1,  // fallback
+            };
+            let output_size = partition.count as usize * bytes_per_word;
+
+            // Allocate host buffer
+            let mut host_buffer = vec![0u8; output_size];
+
+            // Generate batch using device pointer API with optional stream
+            let (device_ptr, size) = gpu_ctx.generate_batch_device_stream(
+                charsets,
+                mask,
+                partition.start_idx,
+                partition.count,
+                stream,
+                output_format,
+            )?;
+
+            // Verify size
+            if size != output_size {
+                eprintln!("[WARNING] Size mismatch! expected={}, got={}", output_size, size);
+            }
+
+            // Copy from device to host (async if stream, sync otherwise)
+            let copy_result = if !stream.is_null() {
+                cuMemcpyDtoHAsync_v2(
+                    host_buffer.as_mut_ptr() as *mut std::ffi::c_void,
+                    device_ptr,
+                    size,
+                    stream,
+                )
+            } else {
+                cuMemcpyDtoH_v2(
+                    host_buffer.as_mut_ptr() as *mut std::ffi::c_void,
+                    device_ptr,
+                    size,
+                )
+            };
+
+            if copy_result != CUresult::CUDA_SUCCESS {
+                let _ = cuMemFree_v2(device_ptr);
+                anyhow::bail!("Failed to copy results: {:?}", copy_result);
+            }
+
+            // Synchronize stream to ensure copy completes
+            if !stream.is_null() {
+                let sync_result = cuStreamSynchronize(stream);
+                if sync_result != CUresult::CUDA_SUCCESS {
+                    let _ = cuMemFree_v2(device_ptr);
+                    anyhow::bail!("Failed to synchronize stream: {:?}", sync_result);
+                }
+            } else {
+                let _ = cuCtxSynchronize();
+            }
+
+            // Free device memory
+            let _ = cuMemFree_v2(device_ptr);
+
+            Ok(host_buffer)
+        }
     }
 
     /// Generate batch across all GPUs in parallel (optimized version)
@@ -357,82 +511,52 @@ impl MultiGpuContext {
             return self.workers[0].context.generate_batch(charsets, mask, start_idx, batch_size, output_format);
         }
 
-        // Multi-GPU path: spawn threads
-        use std::sync::{Arc, Mutex};
-        use std::thread;
+        // Multi-GPU path: use persistent worker threads
+        use std::sync::mpsc::channel;
 
         // Partition keyspace across GPUs
         let partitions = self.partition(start_idx, batch_size);
 
-        // Shared data (charsets and mask)
-        let charsets = Arc::new(charsets.clone());
-        let mask = Arc::new(mask.to_vec());
+        // Get reference to worker threads
+        let worker_threads = self.worker_threads.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Worker threads not initialized"))?;
 
-        // Results storage (indexed by GPU)
-        let results: Arc<Mutex<Vec<Option<Vec<u8>>>>> =
-            Arc::new(Mutex::new(vec![None; self.num_devices]));
-
-        // Launch generation on each GPU in parallel
-        let mut handles = Vec::new();
+        // Create result channels for each worker
+        let mut result_receivers = Vec::new();
 
         for (gpu_idx, partition) in partitions.iter().enumerate() {
             // Skip empty partitions
             if partition.count == 0 {
-                let results = Arc::clone(&results);
-                results.lock().unwrap()[gpu_idx] = Some(Vec::new());
+                let (tx, rx) = channel();
+                let _ = tx.send(Ok(Vec::new()));
+                result_receivers.push(rx);
                 continue;
             }
 
-            let charsets = Arc::clone(&charsets);
-            let mask = Arc::clone(&mask);
-            let results = Arc::clone(&results);
-            let partition = *partition;
+            // Create result channel for this work item
+            let (result_tx, result_rx) = channel();
+            result_receivers.push(result_rx);
 
-            // Create a new GPU context for this thread
-            // Note: We can't share GpuContext across threads due to CUDA context threading model
-            // Each thread needs its own context
-            let device_id = self.workers[gpu_idx].device_id();
+            // Create work item
+            let work_item = WorkItem {
+                charsets: charsets.clone(),
+                mask: mask.to_vec(),
+                partition: *partition,
+                output_format,
+                result_sender: result_tx,
+            };
 
-            let handle = thread::spawn(move || {
-                // Create GPU context for this thread
-                let gpu_ctx = match GpuContext::with_device(device_id) {
-                    Ok(ctx) => ctx,
-                    Err(e) => {
-                        eprintln!("GPU {} failed to create context: {}", device_id, e);
-                        return;
-                    }
-                };
-
-                // Generate batch
-                match gpu_ctx.generate_batch(&charsets, &mask, partition.start_idx, partition.count, output_format) {
-                    Ok(output) => {
-                        results.lock().unwrap()[gpu_idx] = Some(output);
-                    }
-                    Err(e) => {
-                        eprintln!("GPU {} generation failed: {}", device_id, e);
-                    }
-                }
-            });
-
-            handles.push(handle);
+            // Send work to persistent worker thread
+            worker_threads[gpu_idx].0.send(WorkerMessage::Work(work_item))
+                .with_context(|| format!("Failed to send work to GPU {}", gpu_idx))?;
         }
 
-        // Wait for all GPUs to complete
-        for handle in handles {
-            handle.join().map_err(|_| anyhow::anyhow!("GPU thread panicked"))?;
-        }
-
-        // Aggregate results in order
-        let results = results.lock().unwrap();
+        // Collect results in order
         let mut aggregated = Vec::new();
-
-        for (idx, result) in results.iter().enumerate() {
-            match result {
-                Some(data) => aggregated.extend_from_slice(data),
-                None => {
-                    anyhow::bail!("GPU {} did not produce output", idx);
-                }
-            }
+        for (gpu_idx, result_rx) in result_receivers.into_iter().enumerate() {
+            let result = result_rx.recv()
+                .with_context(|| format!("Failed to receive result from GPU {}", gpu_idx))??;
+            aggregated.extend_from_slice(&result);
         }
 
         Ok(aggregated)
@@ -469,181 +593,74 @@ impl MultiGpuContext {
             return self.workers[0].context.generate_batch(charsets, mask, start_idx, batch_size, output_format);
         }
 
-        // Multi-GPU path: spawn threads
-        use std::sync::{Arc, Mutex};
-        use std::thread;
+        // Multi-GPU path: use persistent worker threads (async mode uses streams)
+        use std::sync::mpsc::channel;
 
         // Partition keyspace across GPUs
         let partitions = self.partition(start_idx, batch_size);
 
-        // Shared data (charsets and mask)
-        let charsets = Arc::new(charsets.clone());
-        let mask = Arc::new(mask.to_vec());
+        // Get reference to worker threads
+        let worker_threads = self.worker_threads.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Worker threads not initialized"))?;
 
-        // Results storage (indexed by GPU) with Vec buffers
-        let results: Arc<Mutex<Vec<Option<Vec<u8>>>>> =
-            Arc::new(Mutex::new(vec![None; self.num_devices]));
-
-        // Launch generation on each GPU in parallel
-        let mut handles = Vec::new();
+        // Create result channels for each worker
+        let mut result_receivers = Vec::new();
 
         for (gpu_idx, partition) in partitions.iter().enumerate() {
             // Skip empty partitions
             if partition.count == 0 {
-                let results = Arc::clone(&results);
-                results.lock().unwrap()[gpu_idx] = Some(Vec::new());
+                let (tx, rx) = channel();
+                let _ = tx.send(Ok(Vec::new()));
+                result_receivers.push(rx);
                 continue;
             }
 
-            let charsets = Arc::clone(&charsets);
-            let mask = Arc::clone(&mask);
-            let results = Arc::clone(&results);
-            let partition = *partition;
+            // Create result channel for this work item
+            let (result_tx, result_rx) = channel();
+            result_receivers.push(result_rx);
 
-            // Get device ID
-            let device_id = self.workers[gpu_idx].device_id();
-            let use_stream = self.async_mode;
+            // Create work item
+            let work_item = WorkItem {
+                charsets: charsets.clone(),
+                mask: mask.to_vec(),
+                partition: *partition,
+                output_format,
+                result_sender: result_tx,
+            };
 
-            let handle = thread::spawn(move || {
-                unsafe {
-
-                    // Create GPU context for this thread
-                    let gpu_ctx = match GpuContext::with_device(device_id) {
-                        Ok(ctx) => ctx,
-                        Err(e) => {
-                            eprintln!("GPU {} failed to create context: {}", device_id, e);
-                            return;
-                        }
-                    };
-
-                    // Create CUDA stream for this thread's context
-                    let stream = if use_stream {
-                        let mut stream_ptr: CUstream = std::ptr::null_mut();
-                        let result = cuStreamCreate(&mut stream_ptr, 0);
-                        if result != CUresult::CUDA_SUCCESS {
-                            eprintln!("GPU {} failed to create stream: {:?}", device_id, result);
-                            return;
-                        }
-                        SendPtr::new(stream_ptr)
-                    } else {
-                        SendPtr::new(std::ptr::null_mut())
-                    };
-
-                    // Calculate output size
-                    let word_length = mask.len();
-                    let bytes_per_word = match output_format {
-                        0 => word_length + 1,  // WG_FORMAT_NEWLINES
-                        1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
-                        2 => word_length,      // WG_FORMAT_PACKED
-                        _ => word_length + 1,  // fallback
-                    };
-                    let output_size = partition.count as usize * bytes_per_word;
-
-                    // Allocate regular host memory (Vec) for output
-                    // Note: We tried pinned memory but it causes segfaults when accessed from main thread
-                    let mut host_buffer = vec![0u8; output_size];
-
-                    // Generate batch using device pointer API with stream
-                    let stream_ptr = stream.as_ptr();
-                    match gpu_ctx.generate_batch_device_stream(
-                        &charsets,
-                        &mask,
-                        partition.start_idx,
-                        partition.count,
-                        stream_ptr,
-                        output_format,
-                    ) {
-                        Ok((device_ptr, size)) => {
-
-                            // Verify size matches
-                            if size != output_size {
-                                eprintln!("[WARNING] GPU {} size mismatch! expected={}, got={}", device_id, output_size, size);
-                            }
-
-                            // Async copy from device to host memory
-                            let copy_result = if !stream.is_null() {
-                                cuMemcpyDtoHAsync_v2(
-                                    host_buffer.as_mut_ptr() as *mut std::ffi::c_void,
-                                    device_ptr,
-                                    size,
-                                    stream_ptr,
-                                )
-                            } else {
-                                cuMemcpyDtoH_v2(
-                                    host_buffer.as_mut_ptr() as *mut std::ffi::c_void,
-                                    device_ptr,
-                                    size,
-                                )
-                            };
-
-                            if copy_result != CUresult::CUDA_SUCCESS {
-                                eprintln!("GPU {} failed to copy results: {:?}", device_id, copy_result);
-                                let _ = cuMemFree_v2(device_ptr);
-                                if !stream.is_null() {
-                                    let _ = cuStreamDestroy_v2(stream_ptr);
-                                }
-                                return;
-                            }
-
-                            // Synchronize stream to ensure copy completes BEFORE freeing device memory
-                            if !stream.is_null() {
-                                let sync_result = cuStreamSynchronize(stream_ptr);
-                                if sync_result != CUresult::CUDA_SUCCESS {
-                                    eprintln!("GPU {} failed to synchronize stream", device_id);
-                                    let _ = cuMemFree_v2(device_ptr);
-                                    let _ = cuStreamDestroy_v2(stream_ptr);
-                                    return;
-                                }
-                            } else {
-                                // For sync path, ensure context synchronization
-                                let _ = cuCtxSynchronize();
-                            }
-
-                            // Free device memory (safe after stream sync)
-                            let _ = cuMemFree_v2(device_ptr);
-
-                            // Cleanup stream before storing result
-                            if !stream.is_null() {
-                                let _ = cuStreamDestroy_v2(stream_ptr);
-                            }
-
-                            // Store result buffer (Vec owns the memory)
-                            results.lock().unwrap()[gpu_idx] = Some(host_buffer);
-                        }
-                        Err(e) => {
-                            eprintln!("GPU {} generation failed: {}", device_id, e);
-                            if !stream.is_null() {
-                                let _ = cuStreamDestroy_v2(stream_ptr);
-                            }
-                        }
-                    }
-                }
-            });
-
-            handles.push(handle);
+            // Send work to persistent worker thread
+            worker_threads[gpu_idx].0.send(WorkerMessage::Work(work_item))
+                .with_context(|| format!("Failed to send work to GPU {}", gpu_idx))?;
         }
 
-        // Wait for all GPUs to complete
-        for (idx, handle) in handles.into_iter().enumerate() {
-            handle.join().map_err(|_| anyhow::anyhow!("GPU thread panicked"))?;
-        }
-
-        // Aggregate results in order
-        let results = results.lock().unwrap();
+        // Collect results in order
         let mut aggregated = Vec::new();
-
-        for (idx, result) in results.iter().enumerate() {
-            match result {
-                Some(data) => {
-                    aggregated.extend_from_slice(data);
-                }
-                None => {
-                    anyhow::bail!("GPU {} did not produce output", idx);
-                }
-            }
+        for (gpu_idx, result_rx) in result_receivers.into_iter().enumerate() {
+            let result = result_rx.recv()
+                .with_context(|| format!("Failed to receive result from GPU {}", gpu_idx))??;
+            aggregated.extend_from_slice(&result);
         }
 
         Ok(aggregated)
+    }
+}
+
+impl Drop for MultiGpuContext {
+    fn drop(&mut self) {
+        // Gracefully shutdown persistent worker threads
+        if let Some(ref mut worker_threads) = self.worker_threads {
+            // Send shutdown signal to all workers
+            for (sender, _) in worker_threads.iter() {
+                let _ = sender.send(WorkerMessage::Shutdown);
+            }
+
+            // Wait for all workers to exit (with timeout protection)
+            while let Some((_, handle)) = worker_threads.pop() {
+                // Join with timeout - if thread doesn't exit in 5 seconds, it's leaked
+                // This is acceptable for Drop since we're shutting down anyway
+                let _ = handle.join();
+            }
+        }
     }
 }
 

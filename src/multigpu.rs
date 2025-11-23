@@ -590,12 +590,66 @@ impl MultiGpuContext {
         }
     }
 
+    /// Generate batch with zero-copy callback API (Phase 3 optimization)
+    ///
+    /// This method generates data directly into pinned memory and provides
+    /// a callback with a slice reference, eliminating the final copy to Vec.
+    ///
+    /// For single GPU: TRUE zero-copy (no pinned→Vec allocation)
+    /// For multi-GPU: One fast pinned→pinned copy, then callback (no Vec allocation)
+    ///
+    /// # Arguments
+    /// * `charsets` - Character set definitions
+    /// * `mask` - Mask pattern
+    /// * `start_idx` - Starting index in global keyspace
+    /// * `batch_size` - Total number of words to generate
+    /// * `output_format` - Output format (WG_FORMAT_*)
+    /// * `f` - Callback function that processes the data in pinned memory
+    ///
+    /// # Returns
+    /// Result from the callback function
+    ///
+    /// # Example
+    /// ```no_run
+    /// use gpu_scatter_gather::multigpu::MultiGpuContext;
+    /// use std::collections::HashMap;
+    /// use std::io::Write;
+    ///
+    /// let mut ctx = MultiGpuContext::new()?;
+    /// let mut charsets = HashMap::new();
+    /// charsets.insert(1, b"abc".to_vec());
+    /// let mask = vec![1, 1];
+    ///
+    /// // Write directly to file without allocating Vec
+    /// let mut file = std::fs::File::create("output.txt")?;
+    /// ctx.generate_batch_with(&charsets, &mask, 0, 9, 0, |data| {
+    ///     file.write_all(data)
+    /// })?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn generate_batch_with<F, R>(
+        &mut self,
+        charsets: &HashMap<usize, Vec<u8>>,
+        mask: &[usize],
+        start_idx: u64,
+        batch_size: u64,
+        output_format: i32,
+        f: F,
+    ) -> Result<R>
+    where
+        F: FnOnce(&[u8]) -> R,
+    {
+        if self.async_mode {
+            self.generate_batch_with_async(charsets, mask, start_idx, batch_size, output_format, f)
+        } else {
+            self.generate_batch_with_sync(charsets, mask, start_idx, batch_size, output_format, f)
+        }
+    }
+
     /// Generate batch across all GPUs in parallel (optimized version)
     ///
-    /// This method automatically selects between sync and async implementations
-    /// based on the async_mode setting. When async_mode is enabled, uses:
-    /// - Pinned memory allocation for faster PCIe transfers
-    /// - CUDA streams for overlapped execution
+    /// This is a convenience wrapper around `generate_batch_with` that returns Vec<u8>.
+    /// For maximum performance (zero-copy), use `generate_batch_with` directly.
     ///
     /// # Arguments
     /// * `charsets` - Character set definitions
@@ -614,16 +668,15 @@ impl MultiGpuContext {
         batch_size: u64,
         output_format: i32,
     ) -> Result<Vec<u8>> {
-        if self.async_mode {
-            self.generate_batch_async(charsets, mask, start_idx, batch_size, output_format)
-        } else {
-            self.generate_batch_sync(charsets, mask, start_idx, batch_size, output_format)
-        }
+        self.generate_batch_with(charsets, mask, start_idx, batch_size, output_format, |data| {
+            data.to_vec()
+        })
     }
 
-    /// Generate batch across all GPUs in parallel (synchronous version)
+    /// Generate batch with callback (synchronous version)
     ///
-    /// Uses pinned memory for faster PCIe transfers (2x faster than pageable memory).
+    /// Uses pinned memory for faster PCIe transfers. Data is provided to callback
+    /// directly from pinned memory, eliminating the final Vec allocation.
     ///
     /// # Arguments
     /// * `charsets` - Character set definitions
@@ -631,17 +684,22 @@ impl MultiGpuContext {
     /// * `start_idx` - Starting index in global keyspace
     /// * `batch_size` - Total number of words to generate
     /// * `output_format` - Output format (WG_FORMAT_*)
+    /// * `f` - Callback to process data in pinned memory
     ///
     /// # Returns
-    /// Concatenated output from all GPUs in order
-    fn generate_batch_sync(
+    /// Result from callback
+    fn generate_batch_with_sync<F, R>(
         &mut self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
         batch_size: u64,
         output_format: i32,
-    ) -> Result<Vec<u8>> {
+        f: F,
+    ) -> Result<R>
+    where
+        F: FnOnce(&[u8]) -> R,
+    {
         // Fast path for single GPU: use pinned memory, no threading overhead
         if self.num_devices == 1 {
             unsafe {
@@ -686,10 +744,9 @@ impl MultiGpuContext {
                 // Free device memory
                 let _ = cuMemFree_v2(device_ptr);
 
-                // Copy from pinned to final Vec
-                let mut result = vec![0u8; size];
-                std::ptr::copy_nonoverlapping(pinned_ptr, result.as_mut_ptr(), size);
-                return Ok(result);
+                // Call callback with pinned memory slice (ZERO-COPY!)
+                let slice = std::slice::from_raw_parts(pinned_ptr, size);
+                return Ok(f(slice));
             }
         }
 
@@ -748,32 +805,36 @@ impl MultiGpuContext {
         // Calculate total size
         let total_size: usize = results.iter().map(|(size, _)| size).sum();
 
-        // Concatenate from pinned buffers to final output
+        // Concatenate from worker pinned buffers into buffer[0], then callback
         unsafe {
-            let mut output = vec![0u8; total_size];
+            let output_ptr = self.pinned_buffers[0].as_mut_ptr();
             let mut offset = 0;
 
             for (size, worker_id) in results {
                 if size > 0 {
+                    // Copy from worker buffer to buffer[0] (fast pinned→pinned memcpy)
                     std::ptr::copy_nonoverlapping(
                         self.pinned_buffers[worker_id].as_ptr(),
-                        output.as_mut_ptr().add(offset),
+                        output_ptr.add(offset),
                         size,
                     );
                     offset += size;
                 }
             }
 
-            Ok(output)
+            // Call callback with concatenated data in buffer[0] (NO Vec allocation!)
+            let slice = std::slice::from_raw_parts(output_ptr, total_size);
+            Ok(f(slice))
         }
     }
 
-    /// Generate batch across all GPUs in parallel (async optimized version)
+    /// Generate batch with callback (async optimized version)
     ///
     /// This implementation uses:
     /// - Pinned memory allocation (cuMemAllocHost) for 2x faster PCIe transfers
     /// - CUDA streams for overlapped kernel execution (5-10% improvement)
     /// - Async memory copies for pipelined data transfers
+    /// - Zero-copy callback API (no Vec allocation)
     ///
     /// Expected improvement: 10-15% throughput gain over sync version
     ///
@@ -783,17 +844,22 @@ impl MultiGpuContext {
     /// * `start_idx` - Starting index in global keyspace
     /// * `batch_size` - Total number of words to generate
     /// * `output_format` - Output format (WG_FORMAT_*)
+    /// * `f` - Callback to process data in pinned memory
     ///
     /// # Returns
-    /// Concatenated output from all GPUs in order
-    fn generate_batch_async(
+    /// Result from callback
+    fn generate_batch_with_async<F, R>(
         &mut self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
         batch_size: u64,
         output_format: i32,
-    ) -> Result<Vec<u8>> {
+        f: F,
+    ) -> Result<R>
+    where
+        F: FnOnce(&[u8]) -> R,
+    {
         // Fast path for single GPU: use pinned memory, no threading overhead
         if self.num_devices == 1 {
             unsafe {
@@ -838,10 +904,9 @@ impl MultiGpuContext {
                 // Free device memory
                 let _ = cuMemFree_v2(device_ptr);
 
-                // Copy from pinned to final Vec
-                let mut result = vec![0u8; size];
-                std::ptr::copy_nonoverlapping(pinned_ptr, result.as_mut_ptr(), size);
-                return Ok(result);
+                // Call callback with pinned memory slice (ZERO-COPY!)
+                let slice = std::slice::from_raw_parts(pinned_ptr, size);
+                return Ok(f(slice));
             }
         }
 
@@ -900,23 +965,26 @@ impl MultiGpuContext {
         // Calculate total size
         let total_size: usize = results.iter().map(|(size, _)| size).sum();
 
-        // Concatenate from pinned buffers to final output
+        // Concatenate from worker pinned buffers into buffer[0], then callback
         unsafe {
-            let mut output = vec![0u8; total_size];
+            let output_ptr = self.pinned_buffers[0].as_mut_ptr();
             let mut offset = 0;
 
             for (size, worker_id) in results {
                 if size > 0 {
+                    // Copy from worker buffer to buffer[0] (fast pinned→pinned memcpy)
                     std::ptr::copy_nonoverlapping(
                         self.pinned_buffers[worker_id].as_ptr(),
-                        output.as_mut_ptr().add(offset),
+                        output_ptr.add(offset),
                         size,
                     );
                     offset += size;
                 }
             }
 
-            Ok(output)
+            // Call callback with concatenated data in buffer[0] (NO Vec allocation!)
+            let slice = std::slice::from_raw_parts(output_ptr, total_size);
+            Ok(f(slice))
         }
     }
 }

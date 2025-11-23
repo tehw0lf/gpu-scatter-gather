@@ -352,6 +352,12 @@ impl MultiGpuContext {
         batch_size: u64,
         output_format: i32,
     ) -> Result<Vec<u8>> {
+        // Fast path for single GPU: use worker directly, no threading overhead
+        if self.num_devices == 1 {
+            return self.workers[0].context.generate_batch(charsets, mask, start_idx, batch_size, output_format);
+        }
+
+        // Multi-GPU path: spawn threads
         use std::sync::{Arc, Mutex};
         use std::thread;
 
@@ -458,6 +464,12 @@ impl MultiGpuContext {
         batch_size: u64,
         output_format: i32,
     ) -> Result<Vec<u8>> {
+        // Fast path for single GPU: use worker directly, no threading overhead
+        if self.num_devices == 1 {
+            return self.workers[0].context.generate_batch(charsets, mask, start_idx, batch_size, output_format);
+        }
+
+        // Multi-GPU path: spawn threads
         use std::sync::{Arc, Mutex};
         use std::thread;
 

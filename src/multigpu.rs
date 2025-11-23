@@ -29,6 +29,100 @@ enum WorkerMessage {
     Shutdown,
 }
 
+/// Pinned (page-locked) memory buffer for fast PCIe transfers
+///
+/// Pinned memory provides ~2x faster host ↔ device transfers compared to
+/// pageable memory because it bypasses the intermediate staging buffer.
+///
+/// Uses `CU_MEMHOSTALLOC_PORTABLE` flag to allow access from multiple CUDA contexts,
+/// which is critical for multi-GPU setups where each worker thread has its own context.
+struct PinnedBuffer {
+    /// Raw pointer to pinned memory
+    ptr: *mut u8,
+    /// Size of the buffer in bytes
+    size: usize,
+}
+
+impl PinnedBuffer {
+    /// Allocate pinned memory with PORTABLE flag for multi-context access
+    ///
+    /// # Arguments
+    /// * `size` - Size in bytes to allocate
+    ///
+    /// # Returns
+    /// `Ok(PinnedBuffer)` on success, `Err` if allocation fails
+    ///
+    /// # Safety
+    /// Allocates pinned (page-locked) host memory using CUDA Driver API.
+    /// The memory is automatically freed when the PinnedBuffer is dropped.
+    fn new(size: usize) -> Result<Self> {
+        unsafe {
+            let mut ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+            let result = cuMemHostAlloc(
+                &mut ptr,
+                size,
+                CU_MEMHOSTALLOC_PORTABLE,  // Allow access from any CUDA context
+            );
+
+            if result != CUresult::CUDA_SUCCESS {
+                anyhow::bail!("Failed to allocate {} bytes of pinned memory: {:?}", size, result);
+            }
+
+            Ok(Self {
+                ptr: ptr as *mut u8,
+                size,
+            })
+        }
+    }
+
+    /// Get immutable raw pointer to the pinned memory
+    #[inline]
+    fn as_ptr(&self) -> *const u8 {
+        self.ptr
+    }
+
+    /// Get mutable raw pointer to the pinned memory
+    #[inline]
+    fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.ptr
+    }
+
+    /// Get the size of the buffer
+    #[inline]
+    fn size(&self) -> usize {
+        self.size
+    }
+
+    /// Get a slice view of the pinned memory
+    ///
+    /// # Safety
+    /// Caller must ensure:
+    /// - `len` does not exceed buffer size
+    /// - No concurrent mutable access to the same region
+    #[inline]
+    unsafe fn as_slice(&self, len: usize) -> &[u8] {
+        std::slice::from_raw_parts(self.ptr, len)
+    }
+}
+
+impl Drop for PinnedBuffer {
+    fn drop(&mut self) {
+        unsafe {
+            let result = cuMemFreeHost(self.ptr as *mut std::ffi::c_void);
+            if result != CUresult::CUDA_SUCCESS {
+                eprintln!("Warning: Failed to free pinned memory: {:?}", result);
+            }
+        }
+    }
+}
+
+// SAFETY: PinnedBuffer owns the memory and can be safely sent between threads.
+// The PORTABLE flag ensures it can be accessed from any CUDA context.
+unsafe impl Send for PinnedBuffer {}
+
+// NOT Sync: Each buffer should be owned by a single worker thread at a time
+// to avoid race conditions on the underlying memory.
+
 /// Keyspace partition for a single GPU
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyspacePartition {
@@ -182,6 +276,10 @@ pub struct MultiGpuContext {
     /// Persistent worker threads (for multi-GPU path)
     /// Each tuple: (work_sender, thread_handle)
     worker_threads: Option<Vec<(Sender<WorkerMessage>, JoinHandle<()>)>>,
+    /// Pinned memory buffers (one per worker) for fast PCIe transfers
+    pinned_buffers: Vec<PinnedBuffer>,
+    /// Maximum buffer size per worker (in bytes)
+    max_buffer_size: usize,
 }
 
 impl MultiGpuContext {
@@ -322,11 +420,21 @@ impl MultiGpuContext {
             None  // Single GPU uses fast path
         };
 
+        // Allocate pinned memory buffers (one per worker)
+        // Default: 1 GB per buffer, covers ~111M 8-char words
+        let max_buffer_size = 1_000_000_000;  // 1 GB per worker
+        let pinned_buffers: Vec<PinnedBuffer> = (0..num_devices)
+            .map(|_| PinnedBuffer::new(max_buffer_size))
+            .collect::<Result<Vec<_>>>()
+            .with_context(|| format!("Failed to allocate pinned memory for {} workers", num_devices))?;
+
         Ok(Self {
             workers,
             num_devices,
             async_mode,
             worker_threads,
+            pinned_buffers,
+            max_buffer_size,
         })
     }
 

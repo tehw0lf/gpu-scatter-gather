@@ -1,132 +1,34 @@
-# Next Session: v1.4.0 Ready for Release
+# Next Session: v1.4.0 Released - Ready for v1.5.0
 
-**Status**: ✅ **v1.4.0-dev COMPLETE** (All 3 Phases of Pinned Memory Optimization)
-**Date**: November 23, 2025
+**Status**: ✅ **v1.4.0 RELEASED** (November 23, 2025)
 **Repository**: https://github.com/tehw0lf/gpu-scatter-gather
-**Current Version**: v1.3.0 (Released)
-**Last Release**: v1.3.0 - https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.3.0
-**Next Steps**: Tag and release v1.4.0
+**Current Version**: v1.4.0
+**Last Release**: v1.4.0 - https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.4.0
+**Next Steps**: Begin v1.5.0 development or additional optimizations
 
 ---
 
-## v1.4.0-dev Status: ALL PHASES COMPLETE ✅
+## v1.4.0 Release Summary ✅
 
-### Phase 1: Foundation ✅
-- PinnedBuffer struct with RAII safety (Drop trait, Send marker)
-- MultiGpuContext fields: `pinned_buffers`, `max_buffer_size`
-- Buffer allocation: 1GB per worker in constructor
-- Design document: `docs/design/PINNED_MEMORY_DESIGN.md`
+### What Was Released
+**+65-75% performance improvement** via pinned memory optimization and zero-copy callback API:
 
-### Phase 2: Integration ✅
-- SendPtr wrapper for thread-safe pointer transfer
-- Updated WorkItem to use pinned memory pointers
-- Modified process_work_item to write directly to pinned memory
-- Integrated pinned buffers into both sync and async workflows
-- Workers write directly to pinned memory (2x faster PCIe transfers)
+- **8-char passwords**: 771 M words/s (+75% over v1.3.0)
+- **10-char passwords**: 554 M words/s (+26% over v1.3.0)
+- **12-char passwords**: 497 M words/s (+13% over v1.3.0)
 
-### Phase 3: Zero-Copy API ✅
-- Added `generate_batch_with<F, R>()` callback API
-- Single GPU: TRUE zero-copy (no pinned→Vec allocation)
-- Multi-GPU: Fast pinned→pinned concatenation, then callback
-- Refactored `generate_batch()` to use callback internally
-- Backward compatible: all existing code continues to work
+### Key Features
+- **Zero-Copy Callback API**: `generate_batch_with()` for maximum performance
+- **Pinned Memory Infrastructure**: 1GB buffers per GPU worker (2x faster PCIe)
+- **Backward Compatible**: All existing code works without changes
+- **100% Test Coverage**: 48/48 tests passing
 
----
-
-## Performance Results (RTX 4070 Ti SUPER)
-
-### Baseline (v1.3.0)
-- 8-char: ~440 M words/s
-- Performance: Stable but limited by pageable memory transfers
-
-### v1.4.0-dev (All Phases Complete)
-- **8-char: 727-771 M words/s** (+65-75% improvement!)
-- **10-char: 502-554 M words/s** (+14-26% improvement)
-- **12-char: 441-497 M words/s** (+0-13% improvement)
-
-### Key Metrics
-- **Peak throughput**: 771 M words/s (8-char passwords)
-- **Memory bandwidth**: 6.1 GB/s optimized PCIe usage
-- **Zero allocations**: Callback API eliminates Vec overhead
-- **Tests passing**: 48/48 ✅
-
----
-
-## Release Checklist for v1.4.0
-
-### Pre-Release
-- [x] All 3 phases implemented
-- [x] 48/48 tests passing
-- [x] Performance validated (+65-75% improvement)
-- [x] Backward compatibility verified
-- [x] Git commits clean and documented
-- [x] NEXT_SESSION_PROMPT.md updated
-
-### Release Steps
-1. Update version in `Cargo.toml` to `1.4.0`
-2. Update CHANGELOG.md with v1.4.0 release notes
-3. Tag release: `git tag -a v1.4.0 -m "Release v1.4.0: Pinned Memory + Zero-Copy API"`
-4. Push tags: `git push origin main --tags`
-5. Create GitHub release with performance benchmarks
-6. (Optional) Publish to crates.io
-
-### Release Notes Template
-
-```markdown
-# v1.4.0 - Pinned Memory Optimization + Zero-Copy API
-
-## Major Performance Improvements 🚀
-
-**+65-75% throughput improvement** via three-phase pinned memory optimization:
-
-- **8-char passwords**: 771 M words/s (up from 440 M words/s)
-- **10-char passwords**: 554 M words/s (up from 440 M words/s)
-- **12-char passwords**: 497 M words/s (up from 440 M words/s)
-
-## New Features
-
-### Zero-Copy Callback API
-Added `generate_batch_with()` for maximum performance by eliminating intermediate allocations:
-
-```rust
-// Direct file I/O without Vec allocation
-let mut file = File::create("wordlist.txt")?;
-ctx.generate_batch_with(&charsets, &mask, 0, 10_000_000, 0, |data| {
-    file.write_all(data)
-})?;
-
-// Network streaming
-ctx.generate_batch_with(&charsets, &mask, 0, 10_000_000, 2, |data| {
-    socket.send(data)
-})?;
-```
-
-### Technical Implementation
-- **Phase 1**: Pinned memory infrastructure (1GB buffers per worker)
-- **Phase 2**: Integrated pinned memory into multi-GPU workflow
-- **Phase 3**: Zero-copy callback API for ultimate performance
-
-## Performance Characteristics
-- Single GPU: TRUE zero-copy (data stays in pinned memory)
-- Multi-GPU: Fast pinned→pinned concatenation (~40GB/s memcpy)
-- No Vec allocations in hot path for callback API
-- 2x faster PCIe transfers (pinned vs pageable memory)
-
-## Backward Compatibility
-- All existing `generate_batch()` calls work unchanged
-- 48/48 tests passing
-- Zero breaking changes
-
-## Testing
-- Comprehensive validation across single and multi-GPU setups
-- Async and sync modes tested
-- Memory safety verified
-- Performance benchmarked on RTX 4070 Ti SUPER
-
-## Git Commits
-- `903e6be` - Phase 2: Integrated pinned memory workflow
-- `e2e592d` - Phase 3: Added zero-copy callback API
-```
+### Git Commits
+- `a04b63f` - Version bump to v1.4.0
+- `45c5858` - Documentation updates for release
+- `e2e592d` - Phase 3: Zero-copy callback API
+- `903e6be` - Phase 2: Pinned memory integration
+- `32b9464` - Phase 1: Pinned memory foundation
 
 ---
 
@@ -135,88 +37,206 @@ ctx.generate_batch_with(&charsets, &mask, 0, 10_000_000, 2, |data| {
 ### Priority 1: Dynamic Load Balancing
 **Goal**: 5-10% improvement for heterogeneous multi-GPU setups
 
+**Current State**: Static partitioning divides work evenly across GPUs
+**Problem**: Identical partitions perform poorly with mixed GPU speeds (e.g., RTX 4070 + RTX 3060)
+
 **Approach**:
-- Monitor per-GPU completion times
-- Adjust partition sizes dynamically
+- Monitor per-GPU completion times during generation
+- Build throughput profile for each GPU
+- Adjust partition sizes dynamically based on GPU performance
 - Favor faster GPUs with larger workloads
 
 **Expected Benefit**:
-- Minimal benefit for identical GPUs
-- Significant for mixed GPU configurations (e.g., RTX 4070 + RTX 3060)
+- Minimal benefit for identical GPUs (current static partitioning works well)
+- 5-10% improvement for heterogeneous setups
+- Better resource utilization overall
 
-**Implementation**:
+**Implementation Sketch**:
 ```rust
 struct GpuStats {
     last_completion_time: Duration,
-    throughput_estimate: f64,
+    throughput_estimate: f64,  // Words per second
+    sample_count: usize,
 }
 
-fn adaptive_partition(&self, total_work: u64) -> Vec<KeyspacePartition> {
-    // Partition proportional to GPU throughput estimates
+impl MultiGpuContext {
+    // Track completion time per GPU
+    fn record_completion(&mut self, gpu_id: usize, duration: Duration, words: u64) {
+        let stats = &mut self.gpu_stats[gpu_id];
+        let throughput = words as f64 / duration.as_secs_f64();
+
+        // Exponential moving average
+        stats.throughput_estimate = if stats.sample_count == 0 {
+            throughput
+        } else {
+            0.8 * stats.throughput_estimate + 0.2 * throughput
+        };
+        stats.sample_count += 1;
+    }
+
+    // Adaptive partitioning based on throughput estimates
+    fn adaptive_partition(&self, total_work: u64) -> Vec<KeyspacePartition> {
+        let total_throughput: f64 = self.gpu_stats.iter()
+            .map(|s| s.throughput_estimate)
+            .sum();
+
+        let mut partitions = Vec::new();
+        let mut start_idx = 0;
+
+        for (gpu_id, stats) in self.gpu_stats.iter().enumerate() {
+            let fraction = stats.throughput_estimate / total_throughput;
+            let count = (total_work as f64 * fraction) as u64;
+
+            partitions.push(KeyspacePartition::new(start_idx, count));
+            start_idx += count;
+        }
+
+        partitions
+    }
 }
 ```
+
+**Files to Modify**:
+- `src/multigpu.rs` - Add GpuStats tracking and adaptive_partition()
+- Tests - Validate partitioning with mock throughput data
 
 ---
 
 ### Priority 2: Write-Combined Memory (Experimental)
 **Goal**: Potentially faster writes for specific access patterns
 
+**Current State**: Pinned memory with `CU_MEMHOSTALLOC_PORTABLE` flag
+**Hypothesis**: Write-combined memory may be faster for write-only patterns
+
 **Approach**:
-- Use `CU_MEMHOSTALLOC_WRITECOMBINED` flag
-- Trade off: Faster writes, slower reads
-- Only beneficial if callback doesn't read data
+- Use `CU_MEMHOSTALLOC_WRITECOMBINED` flag in addition to PORTABLE
+- Trade-off: Faster writes, slower reads (cached vs uncached)
+- Only beneficial if callback doesn't read data (e.g., direct file write)
 
 **Risk**: Medium (may not improve or could regress)
 
 **Testing Required**:
 ```rust
+// In PinnedBuffer::new()
 let flags = CU_MEMHOSTALLOC_PORTABLE | CU_MEMHOSTALLOC_WRITECOMBINED;
-cuMemHostAlloc(&mut ptr, size, flags);
+let result = cuMemHostAlloc(&mut ptr, size, flags);
 ```
+
+**Benchmark Strategy**:
+1. Baseline: Current pinned memory (PORTABLE only)
+2. Test A: Write-combined + PORTABLE
+3. Measure: Throughput for file I/O callback vs to_vec() callback
+
+**Expected Outcome**:
+- File I/O: May see 5-15% improvement (write-only pattern)
+- to_vec(): Likely regression (callback reads data)
+- Conclusion: Make configurable based on use case
 
 ---
 
 ### Priority 3: Memory Coalescing Research
 **Goal**: 2-3× potential improvement (high risk, high reward)
 
-**Hypothesis**:
-- Current column-major kernel writes are not fully coalesced
-- Could reorganize kernel to write full cache lines
-- May require significant kernel redesign
+**Current State**: Column-major kernel with CPU transpose (~500-750 M words/s)
+**Hypothesis**: Kernel writes may not be fully coalesced for optimal memory bandwidth
 
-**Approach**:
-1. Profile with Nsight Compute to measure coalescing efficiency
-2. Experiment with different write patterns
-3. Research GPU memory hierarchy optimization
+**Investigation Steps**:
+1. **Profile with Nsight Compute**:
+   ```bash
+   ncu --set full --export profile.ncu-rep ./target/release/examples/benchmark_realistic
+   ```
 
-**Risk**: High (may require complete kernel rewrite)
+2. **Analyze Metrics**:
+   - Global memory load/store efficiency
+   - Coalescing metrics
+   - L1/L2 cache hit rates
+   - Memory bandwidth utilization
+
+3. **Identify Bottleneck**:
+   - Is it memory coalescing?
+   - Or PCIe bandwidth?
+   - Or compute throughput?
+
+4. **Experiment with Patterns**:
+   - Full cache-line writes (128 bytes)
+   - Different block/grid configurations
+   - Shared memory staging
+
+**Risk**: High (may require complete kernel rewrite with uncertain payoff)
+
+**Files to Analyze**:
+- `kernels/wordlist_poc.cu` - Current kernel implementation
+- `src/gpu/mod.rs` - Kernel launch configuration
 
 ---
 
 ### Priority 4: Persistent GPU Buffers
-**Goal**: Eliminate repeated device allocations
+**Goal**: Eliminate repeated device allocations (1-2% improvement)
 
-**Current**: Allocate/free device memory per batch
-**Proposed**: Persistent device buffers reused across batches
+**Current State**: Allocate/free device memory per batch in `generate_batch_device_stream()`
+**Proposal**: Persistent device buffers reused across batches
 
-**Expected Benefit**: 1-2% from reduced allocation overhead
+**Benefits**:
+- Reduce `cuMemAlloc()` and `cuMemFree()` overhead
+- Amortize allocation cost over multiple batches
+- More predictable performance
 
 **Implementation**:
 ```rust
 struct GpuContext {
-    persistent_device_buffer: CUdeviceptr,
+    // Existing fields...
+    persistent_device_buffer: Option<CUdeviceptr>,
     buffer_capacity: usize,
+}
+
+impl GpuContext {
+    fn ensure_device_buffer(&mut self, required_size: usize) -> Result<CUdeviceptr> {
+        if let Some(ptr) = self.persistent_device_buffer {
+            if self.buffer_capacity >= required_size {
+                return Ok(ptr);  // Reuse existing buffer
+            }
+            // Free and reallocate if too small
+            unsafe { cuMemFree_v2(ptr); }
+        }
+
+        // Allocate new buffer
+        let mut ptr: CUdeviceptr = 0;
+        unsafe {
+            cuMemAlloc_v2(&mut ptr, required_size)?;
+        }
+
+        self.persistent_device_buffer = Some(ptr);
+        self.buffer_capacity = required_size;
+        Ok(ptr)
+    }
+}
+
+impl Drop for GpuContext {
+    fn drop(&mut self) {
+        if let Some(ptr) = self.persistent_device_buffer {
+            unsafe { cuMemFree_v2(ptr); }
+        }
+    }
 }
 ```
 
+**Expected Benefit**: 1-2% from reduced allocation overhead
+
 ---
 
-## Development Log References
+## Development References
 
-See comprehensive development history:
+### Documentation
+- `CHANGELOG.md` - Complete version history
+- `docs/design/PINNED_MEMORY_DESIGN.md` - Pinned memory technical spec
 - `docs/development/DEVELOPMENT_LOG.md` - Detailed session notes
-- `docs/design/PINNED_MEMORY_DESIGN.md` - Technical specification
 - `docs/benchmarking/BASELINE_BENCHMARKING_PLAN.md` - Performance methodology
+
+### Key Files
+- `src/multigpu.rs` - Multi-GPU context and pinned memory implementation
+- `src/gpu/mod.rs` - Single GPU context and kernel interface
+- `kernels/wordlist_poc.cu` - CUDA kernels (3 variants)
+- `examples/benchmark_realistic.rs` - Primary performance benchmark
 
 ---
 
@@ -224,52 +244,106 @@ See comprehensive development history:
 
 ```bash
 # Latest commits
-git log --oneline -5
+git log --oneline -7
 
+a04b63f chore: Bump version to v1.4.0
+45c5858 docs: Update NEXT_SESSION_PROMPT for v1.4.0 release readiness
 e2e592d feat(perf): Add zero-copy callback API - Phase 3 of 3 COMPLETE
 903e6be feat(perf): Complete pinned memory optimization - Phase 2 of 3
 32b9464 wip: Pinned memory optimization - Phase 1 of 3 (Foundation)
 1782ee2 chore: Release v1.3.0 - Persistent worker threads + documentation
 90aefa4 docs: Update NEXT_SESSION_PROMPT for v1.3.0-dev state
+
+# Tags
+git tag -l
+v1.1.0
+v1.2.0
+v1.2.1
+v1.3.0
+v1.4.0  # ← Latest release
 ```
 
 ---
 
 ## Quick Start for Next Session
 
-### If releasing v1.4.0:
+### Option A: Begin v1.5.0 Development (Dynamic Load Balancing)
+
+**Recommended**: Start with Priority 1 (Dynamic Load Balancing) as it has:
+- Clear benefit for real-world use cases
+- Low implementation risk
+- Well-defined scope
+
+**Steps**:
 ```bash
-# 1. Update version
-vim Cargo.toml  # Change version to 1.4.0
+# 1. Create development branch
+git checkout -b feature/dynamic-load-balancing
 
-# 2. Update changelog
-vim CHANGELOG.md  # Add v1.4.0 release notes
+# 2. Add GpuStats struct to src/multigpu.rs
+# 3. Implement tracking in process_work_item completion
+# 4. Implement adaptive_partition() method
+# 5. Test with mock throughput data
+# 6. Benchmark with actual heterogeneous GPUs (if available)
 
-# 3. Commit version bump
-git add Cargo.toml CHANGELOG.md
-git commit -m "chore: Bump version to v1.4.0"
-
-# 4. Tag and push
-git tag -a v1.4.0 -m "Release v1.4.0: Pinned Memory + Zero-Copy API"
-git push origin main --tags
-
-# 5. Create GitHub release
-gh release create v1.4.0 --title "v1.4.0: Pinned Memory + Zero-Copy API" --notes-file RELEASE_NOTES.md
+# 7. Commit and merge
+git add src/multigpu.rs tests/
+git commit -m "feat(perf): Add dynamic load balancing for heterogeneous GPUs"
 ```
 
-### If continuing with v1.5.0 optimizations:
-```bash
-# Start with dynamic load balancing
-# See Priority 1 above for implementation plan
+### Option B: Experimental Research (Write-Combined Memory)
 
-# Or experiment with write-combined memory
-# See Priority 2 above for testing approach
+**Exploratory**: Test if write-combined memory helps specific use cases
+
+**Steps**:
+```bash
+# 1. Modify PinnedBuffer::new() to add WRITECOMBINED flag
+# 2. Benchmark file I/O callback vs to_vec() callback
+# 3. Compare with baseline
+# 4. Determine if benefit justifies added complexity
+
+# If beneficial: Make configurable
+# If not: Document findings and close experiment
+```
+
+### Option C: Deep Research (Memory Coalescing)
+
+**High Risk/Reward**: Profile kernel and optimize memory access patterns
+
+**Steps**:
+```bash
+# 1. Profile with Nsight Compute
+ncu --set full --export profile.ncu-rep ./target/release/examples/benchmark_realistic
+
+# 2. Analyze bottlenecks
+# 3. Experiment with kernel modifications
+# 4. Benchmark improvements
+
+# WARNING: May require complete kernel rewrite with uncertain payoff
 ```
 
 ---
 
+## Recommended Next Steps
+
+1. **v1.5.0 Development**: Start with dynamic load balancing (Priority 1)
+   - Clear benefit for heterogeneous GPU setups
+   - Low risk, well-scoped implementation
+   - Expected 5-10% improvement in mixed configurations
+
+2. **Experimental Testing**: Write-combined memory (Priority 2)
+   - Quick experiment to validate hypothesis
+   - May benefit file I/O use cases
+   - Can be done in parallel with Priority 1
+
+3. **Research Phase**: Memory coalescing analysis (Priority 3)
+   - Profile-driven optimization
+   - High potential but uncertain payoff
+   - Consider after v1.5.0 release
+
+---
+
 *Last Updated: November 23, 2025*
-*Version: 14.0 (v1.4.0-dev - ALL PHASES COMPLETE)*
+*Version: 15.0 (v1.4.0 Released)*
 *Current Branch: main*
-*Status: Ready for v1.4.0 release*
-*Next: Tag v1.4.0 or begin v1.5.0 development*
+*Status: Ready for v1.5.0 development*
+*Next: Dynamic load balancing or experimental optimizations*

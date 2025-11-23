@@ -6,8 +6,69 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Sender};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use crate::gpu::GpuContext;
 use cuda_driver_sys::*;
+
+/// Performance statistics for a single GPU
+///
+/// Tracks throughput over time to enable adaptive load balancing
+/// across heterogeneous GPU configurations.
+#[derive(Debug, Clone)]
+struct GpuStats {
+    /// Last completion time for a work item
+    last_completion_time: Duration,
+    /// Estimated throughput in words per second
+    /// Uses exponential moving average for stability
+    throughput_estimate: f64,
+    /// Number of samples collected
+    sample_count: usize,
+}
+
+impl GpuStats {
+    /// Create new stats tracker with no history
+    fn new() -> Self {
+        Self {
+            last_completion_time: Duration::ZERO,
+            throughput_estimate: 0.0,
+            sample_count: 0,
+        }
+    }
+
+    /// Record a completion event and update throughput estimate
+    ///
+    /// # Arguments
+    /// * `duration` - Time taken to complete the work
+    /// * `words` - Number of words generated
+    ///
+    /// Uses exponential moving average with alpha=0.2 to smooth estimates
+    /// while still being responsive to performance changes.
+    fn record_completion(&mut self, duration: Duration, words: u64) {
+        self.last_completion_time = duration;
+
+        let throughput = words as f64 / duration.as_secs_f64();
+
+        // Exponential moving average: new_estimate = alpha * new + (1 - alpha) * old
+        const ALPHA: f64 = 0.2;
+        self.throughput_estimate = if self.sample_count == 0 {
+            throughput  // First sample
+        } else {
+            ALPHA * throughput + (1.0 - ALPHA) * self.throughput_estimate
+        };
+
+        self.sample_count += 1;
+    }
+
+    /// Get current throughput estimate
+    fn throughput(&self) -> f64 {
+        self.throughput_estimate
+    }
+
+    /// Check if we have enough samples for reliable estimates
+    fn has_reliable_estimate(&self) -> bool {
+        self.sample_count >= 3  // Need at least 3 samples
+    }
+}
 
 /// Send-safe wrapper for raw pointer to pinned memory
 ///
@@ -41,8 +102,8 @@ struct WorkItem {
     output_format: i32,
     /// Pinned memory pointer to write output directly (fast PCIe transfers)
     pinned_ptr: SendPtr,
-    /// Channel to send result back (now returns size instead of Vec)
-    result_sender: Sender<Result<usize>>,
+    /// Channel to send result back (returns size and duration for stats)
+    result_sender: Sender<Result<(usize, Duration)>>,
 }
 
 /// Shutdown signal for worker threads
@@ -302,6 +363,8 @@ pub struct MultiGpuContext {
     pinned_buffers: Vec<PinnedBuffer>,
     /// Maximum buffer size per worker (in bytes)
     max_buffer_size: usize,
+    /// Performance statistics per GPU for adaptive load balancing
+    gpu_stats: Vec<GpuStats>,
 }
 
 impl MultiGpuContext {
@@ -457,6 +520,11 @@ impl MultiGpuContext {
             .collect::<Result<Vec<_>>>()
             .with_context(|| format!("Failed to allocate pinned memory for {} workers", num_devices))?;
 
+        // Initialize GPU stats (one per device)
+        let gpu_stats: Vec<GpuStats> = (0..num_devices)
+            .map(|_| GpuStats::new())
+            .collect();
+
         Ok(Self {
             workers,
             num_devices,
@@ -464,6 +532,7 @@ impl MultiGpuContext {
             worker_threads,
             pinned_buffers,
             max_buffer_size,
+            gpu_stats,
         })
     }
 
@@ -501,13 +570,76 @@ impl MultiGpuContext {
     /// # Returns
     /// Vector of partitions, one per active GPU
     pub fn partition(&self, start_idx: u64, count: u64) -> Vec<KeyspacePartition> {
-        let partitions = partition_keyspace(count, self.num_devices);
+        // Check if we have reliable throughput estimates for adaptive partitioning
+        let all_reliable = self.gpu_stats.iter().all(|s| s.has_reliable_estimate());
 
-        // Adjust partitions to account for global start_idx offset
+        if all_reliable && self.num_devices > 1 {
+            // Use adaptive partitioning based on measured throughput
+            self.adaptive_partition(start_idx, count)
+        } else {
+            // Fall back to static partitioning
+            let partitions = partition_keyspace(count, self.num_devices);
+
+            // Adjust partitions to account for global start_idx offset
+            partitions
+                .into_iter()
+                .map(|p| KeyspacePartition::new(start_idx + p.start_idx, p.count))
+                .collect()
+        }
+    }
+
+    /// Adaptive keyspace partitioning based on measured GPU throughput
+    ///
+    /// Distributes work proportionally to each GPU's observed performance,
+    /// allowing heterogeneous GPU setups to achieve better load balancing.
+    ///
+    /// # Arguments
+    /// * `start_idx` - Starting index in global keyspace
+    /// * `total_work` - Total number of words to generate
+    ///
+    /// # Returns
+    /// Vector of partitions sized according to GPU throughput estimates
+    ///
+    /// # Example
+    /// Given 2 GPUs with throughputs 500M/s and 300M/s:
+    /// - GPU 0 gets 62.5% of work (500 / (500 + 300))
+    /// - GPU 1 gets 37.5% of work (300 / (500 + 300))
+    fn adaptive_partition(&self, start_idx: u64, total_work: u64) -> Vec<KeyspacePartition> {
+        // Calculate total throughput across all GPUs
+        let total_throughput: f64 = self.gpu_stats.iter()
+            .map(|s| s.throughput())
+            .sum();
+
+        if total_throughput == 0.0 {
+            // Fallback to static partitioning if no throughput data
+            return partition_keyspace(total_work, self.num_devices)
+                .into_iter()
+                .map(|p| KeyspacePartition::new(start_idx + p.start_idx, p.count))
+                .collect();
+        }
+
+        let mut partitions = Vec::with_capacity(self.num_devices);
+        let mut allocated = 0u64;
+        let mut current_start = start_idx;
+
+        for (gpu_id, stats) in self.gpu_stats.iter().enumerate() {
+            let throughput_fraction = stats.throughput() / total_throughput;
+
+            // Calculate work for this GPU (proportional to throughput)
+            let count = if gpu_id == self.num_devices - 1 {
+                // Last GPU gets remainder to avoid rounding errors
+                total_work.saturating_sub(allocated)
+            } else {
+                let count = (total_work as f64 * throughput_fraction).round() as u64;
+                allocated += count;
+                count
+            };
+
+            partitions.push(KeyspacePartition::new(current_start, count));
+            current_start += count;
+        }
+
         partitions
-            .into_iter()
-            .map(|p| KeyspacePartition::new(start_idx + p.start_idx, p.count))
-            .collect()
     }
 
     /// Process a work item on a persistent worker thread
@@ -515,6 +647,8 @@ impl MultiGpuContext {
     /// This is called by persistent worker threads to generate a batch.
     /// The GPU context and stream are owned by the worker thread.
     /// Output is written directly to pinned memory for fast PCIe transfers.
+    ///
+    /// Returns (output_size, duration) for performance tracking
     fn process_work_item(
         gpu_ctx: &GpuContext,
         partition: KeyspacePartition,
@@ -523,7 +657,9 @@ impl MultiGpuContext {
         output_format: i32,
         stream: CUstream,
         pinned_ptr: SendPtr,
-    ) -> Result<usize> {
+    ) -> Result<(usize, Duration)> {
+        let start_time = std::time::Instant::now();
+
         unsafe {
             // Calculate output size
             let word_length = mask.len();
@@ -585,8 +721,11 @@ impl MultiGpuContext {
             // Free device memory
             let _ = cuMemFree_v2(device_ptr);
 
-            // Return size written
-            Ok(size)
+            // Calculate elapsed time
+            let duration = start_time.elapsed();
+
+            // Return size written and duration for stats tracking
+            Ok((size, duration))
         }
     }
 
@@ -711,7 +850,7 @@ impl MultiGpuContext {
                     2 => word_length,      // WG_FORMAT_PACKED
                     _ => word_length + 1,  // fallback
                 };
-                let output_size = batch_size as usize * bytes_per_word;
+                let _output_size = batch_size as usize * bytes_per_word;
 
                 // Get pinned buffer pointer
                 let pinned_ptr = self.pinned_buffers[0].as_mut_ptr();
@@ -767,7 +906,7 @@ impl MultiGpuContext {
             // Skip empty partitions
             if partition.count == 0 {
                 let (tx, rx) = channel();
-                let _ = tx.send(Ok(0));
+                let _ = tx.send(Ok((0, Duration::ZERO)));
                 result_receivers.push((rx, gpu_idx));
                 continue;
             }
@@ -792,25 +931,38 @@ impl MultiGpuContext {
             result_receivers.push((result_rx, gpu_idx));
         }
 
-        // Collect sizes from workers
-        let mut results: Vec<(usize, usize)> = result_receivers
+        // Collect results from workers (size, duration, worker_id)
+        let results: Vec<(usize, Duration, usize)> = result_receivers
             .into_iter()
             .map(|(rx, worker_id)| {
-                let size = rx.recv()
+                let (size, duration) = rx.recv()
                     .with_context(|| format!("Failed to receive from GPU {}", worker_id))??;
-                Ok((size, worker_id))
+                Ok((size, duration, worker_id))
             })
             .collect::<Result<Vec<_>>>()?;
 
+        // Record performance stats for adaptive load balancing
+        for &(size, duration, worker_id) in &results {
+            let word_length = mask.len();
+            let bytes_per_word = match output_format {
+                0 => word_length + 1,  // WG_FORMAT_NEWLINES
+                1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
+                2 => word_length,      // WG_FORMAT_PACKED
+                _ => word_length + 1,  // fallback
+            };
+            let words = size / bytes_per_word;
+            self.gpu_stats[worker_id].record_completion(duration, words as u64);
+        }
+
         // Calculate total size
-        let total_size: usize = results.iter().map(|(size, _)| size).sum();
+        let total_size: usize = results.iter().map(|(size, _, _)| size).sum();
 
         // Concatenate from worker pinned buffers into buffer[0], then callback
         unsafe {
             let output_ptr = self.pinned_buffers[0].as_mut_ptr();
             let mut offset = 0;
 
-            for (size, worker_id) in results {
+            for (size, _, worker_id) in results {
                 if size > 0 {
                     // Copy from worker buffer to buffer[0] (fast pinned→pinned memcpy)
                     std::ptr::copy_nonoverlapping(
@@ -871,7 +1023,7 @@ impl MultiGpuContext {
                     2 => word_length,      // WG_FORMAT_PACKED
                     _ => word_length + 1,  // fallback
                 };
-                let output_size = batch_size as usize * bytes_per_word;
+                let _output_size = batch_size as usize * bytes_per_word;
 
                 // Get pinned buffer pointer
                 let pinned_ptr = self.pinned_buffers[0].as_mut_ptr();
@@ -927,7 +1079,7 @@ impl MultiGpuContext {
             // Skip empty partitions
             if partition.count == 0 {
                 let (tx, rx) = channel();
-                let _ = tx.send(Ok(0));
+                let _ = tx.send(Ok((0, Duration::ZERO)));
                 result_receivers.push((rx, gpu_idx));
                 continue;
             }
@@ -952,25 +1104,38 @@ impl MultiGpuContext {
             result_receivers.push((result_rx, gpu_idx));
         }
 
-        // Collect sizes from workers
-        let mut results: Vec<(usize, usize)> = result_receivers
+        // Collect results from workers (size, duration, worker_id)
+        let results: Vec<(usize, Duration, usize)> = result_receivers
             .into_iter()
             .map(|(rx, worker_id)| {
-                let size = rx.recv()
+                let (size, duration) = rx.recv()
                     .with_context(|| format!("Failed to receive from GPU {}", worker_id))??;
-                Ok((size, worker_id))
+                Ok((size, duration, worker_id))
             })
             .collect::<Result<Vec<_>>>()?;
 
+        // Record performance stats for adaptive load balancing
+        for &(size, duration, worker_id) in &results {
+            let word_length = mask.len();
+            let bytes_per_word = match output_format {
+                0 => word_length + 1,  // WG_FORMAT_NEWLINES
+                1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
+                2 => word_length,      // WG_FORMAT_PACKED
+                _ => word_length + 1,  // fallback
+            };
+            let words = size / bytes_per_word;
+            self.gpu_stats[worker_id].record_completion(duration, words as u64);
+        }
+
         // Calculate total size
-        let total_size: usize = results.iter().map(|(size, _)| size).sum();
+        let total_size: usize = results.iter().map(|(size, _, _)| size).sum();
 
         // Concatenate from worker pinned buffers into buffer[0], then callback
         unsafe {
             let output_ptr = self.pinned_buffers[0].as_mut_ptr();
             let mut offset = 0;
 
-            for (size, worker_id) in results {
+            for (size, _, worker_id) in results {
                 if size > 0 {
                     // Copy from worker buffer to buffer[0] (fast pinned→pinned memcpy)
                     std::ptr::copy_nonoverlapping(
@@ -1242,10 +1407,10 @@ mod tests {
     fn test_multi_gpu_async_creation() {
         // Test async multi-GPU context creation
         match MultiGpuContext::new_async() {
-            Ok(mut ctx) => {
+            Ok(ctx) => {
                 assert!(ctx.num_devices() >= 1);
             }
-            Err(e) => {
+            Err(_e) => {
             }
         }
     }
@@ -1376,6 +1541,189 @@ mod tests {
             }
             Err(e) => {
                 println!("No GPU available for async test: {}", e);
+            }
+        }
+    }
+
+    // GpuStats tests
+    #[test]
+    fn test_gpu_stats_new() {
+        let stats = GpuStats::new();
+        assert_eq!(stats.throughput(), 0.0);
+        assert_eq!(stats.sample_count, 0);
+        assert!(!stats.has_reliable_estimate());
+    }
+
+    #[test]
+    fn test_gpu_stats_single_sample() {
+        let mut stats = GpuStats::new();
+
+        // Record: 1,000,000 words in 1 second = 1M words/sec
+        stats.record_completion(Duration::from_secs(1), 1_000_000);
+
+        assert_eq!(stats.throughput(), 1_000_000.0);
+        assert_eq!(stats.sample_count, 1);
+        assert!(!stats.has_reliable_estimate()); // Need 3 samples
+    }
+
+    #[test]
+    fn test_gpu_stats_multiple_samples() {
+        let mut stats = GpuStats::new();
+
+        // Record 3 samples
+        stats.record_completion(Duration::from_secs(1), 1_000_000); // 1M/s
+        stats.record_completion(Duration::from_secs(1), 900_000);   // 0.9M/s
+        stats.record_completion(Duration::from_secs(1), 1_100_000); // 1.1M/s
+
+        assert_eq!(stats.sample_count, 3);
+        assert!(stats.has_reliable_estimate());
+
+        // With ALPHA=0.2, the estimate should be close to the average
+        // but weighted toward recent samples
+        let throughput = stats.throughput();
+        assert!(throughput > 950_000.0 && throughput < 1_050_000.0);
+    }
+
+    #[test]
+    fn test_gpu_stats_exponential_moving_average() {
+        let mut stats = GpuStats::new();
+
+        // First sample
+        stats.record_completion(Duration::from_secs(1), 1_000_000); // 1M/s
+        assert_eq!(stats.throughput(), 1_000_000.0);
+
+        // Second sample: higher throughput
+        stats.record_completion(Duration::from_secs(1), 2_000_000); // 2M/s
+
+        // EMA: 0.2 * 2M + 0.8 * 1M = 0.4M + 0.8M = 1.2M
+        assert_eq!(stats.throughput(), 1_200_000.0);
+
+        // Third sample: lower throughput
+        stats.record_completion(Duration::from_secs(1), 1_000_000); // 1M/s
+
+        // EMA: 0.2 * 1M + 0.8 * 1.2M = 0.2M + 0.96M = 1.16M
+        assert_eq!(stats.throughput(), 1_160_000.0);
+    }
+
+    #[test]
+    fn test_adaptive_partition_heterogeneous() {
+        use std::time::Duration;
+
+        // Create a mock multi-GPU context with 2 GPUs
+        // We'll manually construct gpu_stats to simulate heterogeneous GPUs
+        match MultiGpuContext::with_devices(&[0]) {
+            Ok(ctx) => {
+                let mut ctx = ctx;
+                // Simulate 2-GPU setup by manually adding stats
+                // GPU 0: 500M words/s
+                // GPU 1: 300M words/s
+                ctx.gpu_stats = vec![GpuStats::new(), GpuStats::new()];
+                ctx.num_devices = 2;
+
+                // Record samples to establish throughput
+                for _ in 0..3 {
+                    ctx.gpu_stats[0].record_completion(Duration::from_secs(1), 500_000_000);
+                    ctx.gpu_stats[1].record_completion(Duration::from_secs(1), 300_000_000);
+                }
+
+                // Test adaptive partitioning with 800M words
+                let partitions = ctx.adaptive_partition(0, 800_000_000);
+
+                assert_eq!(partitions.len(), 2);
+
+                // GPU 0 should get ~62.5% (500 / 800 = 0.625)
+                // GPU 1 should get ~37.5% (300 / 800 = 0.375)
+                let gpu0_expected = 500_000_000; // 62.5% of 800M
+                let gpu1_expected = 300_000_000; // 37.5% of 800M
+
+                // Allow 1% tolerance for rounding
+                let tolerance = 8_000_000; // 1% of 800M
+                assert!((partitions[0].count as i64 - gpu0_expected as i64).abs() < tolerance as i64,
+                    "GPU 0 got {} words, expected {} ± {}", partitions[0].count, gpu0_expected, tolerance);
+                assert!((partitions[1].count as i64 - gpu1_expected as i64).abs() < tolerance as i64,
+                    "GPU 1 got {} words, expected {} ± {}", partitions[1].count, gpu1_expected, tolerance);
+
+                // Verify total coverage
+                let total: u64 = partitions.iter().map(|p| p.count).sum();
+                assert_eq!(total, 800_000_000);
+
+                // Verify no gaps
+                assert_eq!(partitions[0].start_idx, 0);
+                assert_eq!(partitions[1].start_idx, partitions[0].count);
+            }
+            Err(e) => {
+                println!("No GPU available for adaptive partition test: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_adaptive_partition_balanced() {
+        use std::time::Duration;
+
+        // Test with balanced GPUs (same throughput)
+        match MultiGpuContext::with_devices(&[0]) {
+            Ok(ctx) => {
+                let mut ctx = ctx;
+                // Simulate 3-GPU setup with equal throughput
+                ctx.gpu_stats = vec![GpuStats::new(), GpuStats::new(), GpuStats::new()];
+                ctx.num_devices = 3;
+
+                // All GPUs: 400M words/s
+                for _ in 0..3 {
+                    for i in 0..3 {
+                        ctx.gpu_stats[i].record_completion(Duration::from_secs(1), 400_000_000);
+                    }
+                }
+
+                // Test with 1.2B words
+                let partitions = ctx.adaptive_partition(0, 1_200_000_000);
+
+                assert_eq!(partitions.len(), 3);
+
+                // Each GPU should get ~400M words (1/3 of total)
+                for (i, partition) in partitions.iter().enumerate() {
+                    let tolerance = 12_000_000; // 1% tolerance
+                    assert!((partition.count as i64 - 400_000_000i64).abs() < tolerance as i64,
+                        "GPU {} got {} words, expected 400M ± {}", i, partition.count, tolerance);
+                }
+
+                // Verify total
+                let total: u64 = partitions.iter().map(|p| p.count).sum();
+                assert_eq!(total, 1_200_000_000);
+            }
+            Err(e) => {
+                println!("No GPU available for balanced partition test: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_partition_fallback_before_reliable() {
+        // Test that partition() falls back to static partitioning
+        // when throughput estimates aren't reliable yet
+        match MultiGpuContext::with_devices(&[0]) {
+            Ok(ctx) => {
+                let mut ctx = ctx;
+                // Simulate 2-GPU setup but without enough samples
+                ctx.gpu_stats = vec![GpuStats::new(), GpuStats::new()];
+                ctx.num_devices = 2;
+
+                // Only 1 sample (need 3 for reliable estimate)
+                ctx.gpu_stats[0].record_completion(Duration::from_secs(1), 500_000_000);
+                ctx.gpu_stats[1].record_completion(Duration::from_secs(1), 300_000_000);
+
+                // partition() should use static partitioning (50/50 split)
+                let partitions = ctx.partition(0, 1_000_000);
+
+                assert_eq!(partitions.len(), 2);
+
+                // Should be evenly split (static partitioning)
+                assert_eq!(partitions[0].count, 500_000);
+                assert_eq!(partitions[1].count, 500_000);
+            }
+            Err(e) => {
+                println!("No GPU available for fallback test: {}", e);
             }
         }
     }

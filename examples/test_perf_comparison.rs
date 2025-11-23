@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     // Test 2: Multi-GPU sync (1 device)
     println!("\n🔷 Test 2: MultiGpuContext::new() (sync, 1 GPU)");
     let (duration2, throughput2, output_len2) = {
-        let ctx_sync = MultiGpuContext::new()?;
+        let mut ctx_sync = MultiGpuContext::new()?;
         let start = Instant::now();
         let output2 = ctx_sync.generate_batch(&charsets, &mask, 0, batch_size, 2)?;
         let duration2 = start.elapsed();

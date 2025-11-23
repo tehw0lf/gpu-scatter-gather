@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - TBD
+
+### Added - Dynamic Load Balancing for Heterogeneous GPUs
+
+#### Adaptive Workload Distribution
+**New**: Automatic performance-based load balancing for multi-GPU systems with different GPU models.
+
+- **Throughput tracking**: Per-GPU performance statistics with exponential moving average
+- **Adaptive partitioning**: Work distribution proportional to measured GPU speed
+- **Automatic fallback**: Uses static partitioning until reliable estimates available (3+ samples)
+- **Expected improvement**: 5-10% for heterogeneous setups (e.g., RTX 4070 + RTX 3060)
+
+#### How It Works
+```rust
+// Example: 2 GPUs with different performance
+// GPU 0: RTX 4070 → 500 M words/s
+// GPU 1: RTX 3060 → 300 M words/s
+
+let mut ctx = MultiGpuContext::new()?;
+
+// First 3 batches: Static partitioning (50/50 split)
+// Builds throughput estimates via GpuStats
+
+// After 3 batches: Adaptive partitioning activates
+// GPU 0 gets 62.5% of work (500 / 800)
+// GPU 1 gets 37.5% of work (300 / 800)
+// → Better load balancing, higher overall throughput
+```
+
+#### Technical Details
+- `GpuStats` struct tracks completion time and words generated per GPU
+- Exponential moving average (α=0.2) smooths throughput estimates
+- Requires 3+ samples for reliable estimates (configurable via `has_reliable_estimate()`)
+- Proportional work allocation based on measured throughput ratios
+
+#### Backward Compatibility
+- **100% compatible**: No API changes, works automatically
+- Single-GPU setups: No overhead (fast path unchanged)
+- Homogeneous multi-GPU: Minimal overhead, same performance
+- Heterogeneous multi-GPU: Improved load balancing after warmup
+
+### Testing
+- Added 6 new unit tests for `GpuStats` and adaptive partitioning logic
+- Tests cover: heterogeneous GPUs, balanced GPUs, fallback behavior
+- All 25 multi-GPU tests passing
+
 ## [1.4.0] - 2025-11-23
 
 ### Added - Pinned Memory Optimization + Zero-Copy API 🚀

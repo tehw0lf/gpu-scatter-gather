@@ -5,15 +5,15 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.82+-orange.svg)](https://www.rust-lang.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-11.8+-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
-[![Release](https://img.shields.io/badge/release-v1.2.0-brightgreen.svg)](https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.2.0)
+[![Release](https://img.shields.io/badge/release-v1.2.1-brightgreen.svg)](https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.2.1)
 
 > 📄 **[Read the Technical Whitepaper](https://github.com/tehw0lf/gpu-scatter-gather/releases/download/v1.0.0/GPU_Scatter_Gather_Whitepaper_v1.0.0.pdf)** - Comprehensive algorithm design, formal proofs, and performance evaluation
 >
-> ✅ **Status:** v1.2.0 Released! (Async Multi-GPU Optimization)
+> ✅ **Status:** v1.2.1 Released! (Critical Performance Fix)
 >
 > Production-ready library with **4-7× speedup** over CPU tools (maskprocessor, cracken).
 > Complete C FFI API with 24 functions (17 single-GPU + 7 multi-GPU), 3 output formats, formal validation, and integration guides.
-> **NEW:** Async multi-GPU optimization with CUDA streams (+11% on medium batches)!
+> **FIXED:** Critical performance regression in v1.2.0 (4-5× speedup restored for single-GPU systems)!
 > See [Development Log](docs/development/DEVELOPMENT_LOG.md) for detailed progress.
 
 ## Overview
@@ -49,13 +49,13 @@ This enables:
 
 ## Features
 
-### v1.2.0 Release ✅ (Async Multi-GPU Optimization)
+### v1.2.1 Release ✅ (Performance Fix)
 
-- ✅ **Async Multi-GPU Execution** - CUDA streams for overlapped kernel execution
-- ✅ **+11.3% Performance Improvement** - Optimized for medium batches (50M words)
-- ✅ **MultiGpuContext::new_async() API** - Opt-in async mode, fully backward compatible
-- ✅ **Per-Thread Stream Management** - Thread-safe CUDA stream creation and synchronization
-- ✅ **48/48 Tests Passing** - Added 4 new async-specific tests
+- ✅ **CRITICAL FIX**: Restored 4-5× performance for single-GPU multi-GPU API usage
+- ✅ **Fast Path Optimization** - Single-GPU systems bypass threading overhead entirely
+- ✅ **560-600 M words/s** - Full performance restored (was 112-150 M words/s in v1.2.0)
+- ✅ **0-5% Overhead** - Multi-GPU API now matches direct GPU API performance
+- ✅ **Backward Compatible** - No code changes required for upgrade from v1.2.0
 - ✅ **Multi-GPU API** - 7 functions for automatic parallel generation across GPUs
 - ✅ **90-95% Scaling Efficiency** - Minimal overhead with automatic workload distribution
 - ✅ **Automatic Keyspace Partitioning** - Static distribution algorithm with load balancing

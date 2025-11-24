@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance Baseline Validation
+
+#### 16-Character Password Baseline (2025-11-24)
+**Status**: ✅ Baseline established on main branch (v1.5.0)
+
+Validated performance with 16-character passwords using realistic pattern:
+- **Pattern**: `?l?l?l?l?l?l?l?l?l?l?l?l?d?d?d?d` (12 lowercase + 4 digits)
+- **GPU**: RTX 4070 Ti SUPER (Compute Capability 8.9)
+
+**Results** (PACKED format):
+
+| Batch Size | Throughput | Bandwidth | Time |
+|------------|-----------|-----------|------|
+| 10M words  | 353 M words/s | 5.6 GB/s | 0.028s |
+| 50M words  | 365 M words/s | 5.8 GB/s | 0.137s |
+| 100M words | 317 M words/s | 5.1 GB/s | 0.316s |
+
+**Comparison with other lengths** (50M batch):
+
+| Length | Throughput | Notes |
+|--------|-----------|-------|
+| 8-char  | 774 M words/s | Baseline v1.4.0 |
+| 10-char | 576 M words/s | |
+| 12-char | 526 M words/s | |
+| 16-char | 365 M words/s | **New baseline** |
+
+**Observations**:
+- Performance scales predictably with password length
+- 16-char: ~47% of 8-char throughput (expected due to 2× data size)
+- Bandwidth remains healthy at ~5.8 GB/s (consistent with PCIe limits)
+- Main branch PORTABLE-only pinned memory significantly faster than write-combined experiment (365 vs 28 M/s)
+
+**Next Steps**: With optimization phase complete, future work focuses on:
+1. Research optimizations (memory coalescing - high risk/reward)
+2. Marginal improvements (persistent GPU buffers - 1-2%)
+3. Feature development (hybrid masks, rules, OpenCL, Python bindings)
+
 ### Experimental Work
 
 #### Write-Combined Memory Experiment (2025-11-24)

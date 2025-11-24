@@ -43,6 +43,7 @@ fn main() -> Result<()> {
         (8,  4, 4, "?l?l?l?l?d?d?d?d", 26u64.pow(4) * 10u64.pow(4)),          // 456,976,000
         (10, 6, 4, "?l?l?l?l?l?l?d?d?d?d", 26u64.pow(6) * 10u64.pow(4)),      // 3,089,157,760,000
         (12, 8, 4, "?l?l?l?l?l?l?l?l?d?d?d?d", 26u64.pow(8) * 10u64.pow(4)), // 20,863,377,862,720,000
+        (16, 12, 4, "?l?l?l?l?l?l?l?l?l?l?l?l?d?d?d?d", 26u64.pow(12) * 10u64.pow(4)), // ~9.5e16
     ];
 
     // Batch sizes to test (smaller for longer words due to larger keyspace)

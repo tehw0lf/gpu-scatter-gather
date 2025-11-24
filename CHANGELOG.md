@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance - Persistent GPU Buffers (2025-11-24)
+**Status**: ✅ Implemented - Marginal improvement (~0.5% or less)
+
+Added persistent GPU output buffer to `GpuContext` to eliminate repeated device memory allocations across batches.
+
+**Implementation**:
+- Added `persistent_output_buffer` field to `GpuContext`
+- `ensure_output_buffer()` method reuses existing buffer when large enough
+- Automatic cleanup in `Drop` implementation
+- Changed method signatures to use `&mut self` for buffer management
+
+**Performance Impact** (50M batch, PACKED format):
+
+| Length | Before | After | Change |
+|--------|--------|-------|--------|
+| 8-char  | 774 M/s | 765 M/s | ~0% |
+| 10-char | 576 M/s | 610 M/s | +6% |
+| 12-char | 526 M/s | 535 M/s | +2% |
+| 16-char | 365 M/s | 364 M/s | ~0% |
+
+**Analysis**:
+- Improvements are within measurement variance (< 1% average)
+- Memory allocation overhead is negligible compared to kernel execution + PCIe transfer
+- Main bottleneck remains PCIe bandwidth, not allocation overhead
+- Code improvement is architecturally sound but provides minimal performance benefit
+
+**Conclusion**: Optimization retained for cleaner code structure, but does not significantly impact throughput. Future optimizations should focus on:
+1. Memory coalescing in CUDA kernels (2-3× potential)
+2. Feature development (hybrid masks, rules, OpenCL, Python bindings)
+
 ### Performance Baseline Validation
 
 #### 16-Character Password Baseline (2025-11-24)

@@ -19,6 +19,9 @@ pub struct GpuContext {
     device: CUdevice,
     device_id: i32,
     compute_capability: (i32, i32),
+    // Persistent GPU buffers for reuse across batches
+    persistent_output_buffer: Option<CUdeviceptr>,
+    persistent_output_capacity: usize,
 }
 
 impl GpuContext {
@@ -111,6 +114,8 @@ impl GpuContext {
                 device,
                 device_id,
                 compute_capability: (compute_capability_major, compute_capability_minor),
+                persistent_output_buffer: None,
+                persistent_output_capacity: 0,
             })
         }
     }
@@ -142,9 +147,35 @@ impl GpuContext {
         self.device_id
     }
 
+    /// Ensure persistent output buffer is allocated with at least the required size.
+    /// Reuses existing buffer if large enough, otherwise reallocates.
+    ///
+    /// Returns the device pointer to use for output.
+    unsafe fn ensure_output_buffer(&mut self, required_size: usize) -> Result<CUdeviceptr> {
+        // Check if existing buffer is large enough
+        if let Some(ptr) = self.persistent_output_buffer {
+            if self.persistent_output_capacity >= required_size {
+                // Reuse existing buffer
+                return Ok(ptr);
+            }
+
+            // Free old buffer if too small
+            check_cuda(cuMemFree_v2(ptr))?;
+        }
+
+        // Allocate new buffer
+        let mut new_buffer: CUdeviceptr = 0;
+        check_cuda(cuMemAlloc_v2(&mut new_buffer, required_size))?;
+
+        self.persistent_output_buffer = Some(new_buffer);
+        self.persistent_output_capacity = required_size;
+
+        Ok(new_buffer)
+    }
+
     /// Generate words using GPU (original uncoalesced kernel)
     pub fn generate_batch(
-        &self,
+        &mut self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
@@ -156,7 +187,7 @@ impl GpuContext {
 
     /// Generate words using GPU with transposed writes (fully coalesced)
     pub fn generate_batch_transposed(
-        &self,
+        &mut self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
@@ -348,7 +379,7 @@ impl GpuContext {
     /// Expected performance: 800-1200 M words/s for 12-char passwords
     /// (2-3x faster than standard kernel due to improved memory coalescing)
     pub fn generate_batch_hybrid(
-        &self,
+        &mut self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
@@ -505,7 +536,7 @@ impl GpuContext {
 
     /// Internal implementation for word generation
     fn generate_batch_internal(
-        &self,
+        &mut self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],
         start_idx: u64,
@@ -535,13 +566,6 @@ impl GpuContext {
             let mask_pattern: Vec<i32> = mask.iter().map(|&x| x as i32).collect();
             let word_length = mask.len() as i32;
 
-            // Allocate GPU memory
-            let mut d_charset_data = 0u64;
-            let mut d_charset_offsets = 0u64;
-            let mut d_charset_sizes = 0u64;
-            let mut d_mask_pattern = 0u64;
-            let mut d_output = 0u64;
-
             // Calculate output size based on format
             let bytes_per_word = match output_format {
                 0 => word_length as usize + 1,  // WG_FORMAT_NEWLINES
@@ -550,6 +574,12 @@ impl GpuContext {
                 _ => word_length as usize + 1,  // fallback
             };
             let output_size = batch_size as usize * bytes_per_word;
+
+            // Allocate temporary GPU memory for kernel inputs
+            let mut d_charset_data = 0u64;
+            let mut d_charset_offsets = 0u64;
+            let mut d_charset_sizes = 0u64;
+            let mut d_mask_pattern = 0u64;
 
             check_cuda(cuMemAlloc_v2(&mut d_charset_data, charset_data.len()))?;
             check_cuda(cuMemAlloc_v2(
@@ -564,7 +594,9 @@ impl GpuContext {
                 &mut d_mask_pattern,
                 mask_pattern.len() * std::mem::size_of::<i32>(),
             ))?;
-            check_cuda(cuMemAlloc_v2(&mut d_output, output_size))?;
+
+            // Use persistent output buffer (reuse or allocate)
+            let d_output = self.ensure_output_buffer(output_size)?;
 
             // Copy data to GPU
             check_cuda(cuMemcpyHtoD_v2(
@@ -637,12 +669,12 @@ impl GpuContext {
                 output_size,
             ))?;
 
-            // Cleanup GPU memory
+            // Cleanup temporary GPU memory (persistent buffer is reused)
             check_cuda(cuMemFree_v2(d_charset_data))?;
             check_cuda(cuMemFree_v2(d_charset_offsets))?;
             check_cuda(cuMemFree_v2(d_charset_sizes))?;
             check_cuda(cuMemFree_v2(d_mask_pattern))?;
-            check_cuda(cuMemFree_v2(d_output))?;
+            // Note: d_output is persistent and managed by self.persistent_output_buffer
 
             Ok(output)
         }
@@ -652,6 +684,11 @@ impl GpuContext {
 impl Drop for GpuContext {
     fn drop(&mut self) {
         unsafe {
+            // Free persistent output buffer if allocated
+            if let Some(ptr) = self.persistent_output_buffer {
+                let _ = cuMemFree_v2(ptr);
+            }
+
             let _ = cuModuleUnload(self.module);
             let _ = cuCtxDestroy_v2(self.context);
         }

@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     println!();
 
     // Initialize GPU
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
 

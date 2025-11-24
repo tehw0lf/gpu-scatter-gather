@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     println!("=== GPU Scatter-Gather Hybrid Architecture Benchmark ===\n");
 
     // Initialize GPU
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
     println!("GPU Device: {}", gpu.device_name()?);
     println!("Compute Capability: {:?}\n", gpu.compute_capability());
 

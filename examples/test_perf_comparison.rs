@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     // Test 1: Direct GPU context
     println!("\n🔷 Test 1: Direct GpuContext API");
     let (duration1, throughput1, output_len1) = {
-        let gpu = GpuContext::new()?;
+        let mut gpu = GpuContext::new()?;
         let start = Instant::now();
         let output1 = gpu.generate_batch(&charsets, &mask, 0, batch_size, 2)?;
         let duration1 = start.elapsed();

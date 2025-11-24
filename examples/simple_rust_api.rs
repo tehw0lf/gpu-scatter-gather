@@ -45,7 +45,7 @@ fn main() -> Result<()> {
 fn example_1_output_formats() -> Result<()> {
     println!("📋 Example 1: Output Formats\n");
 
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
 
     // Define a simple pattern: 2 letters + 2 digits
     let mut charsets = HashMap::new();
@@ -134,7 +134,7 @@ fn example_2_multi_gpu() -> Result<()> {
 fn example_3_partial_keyspace() -> Result<()> {
     println!("📋 Example 3: Partial Keyspace Generation\n");
 
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
 
     let mut charsets = HashMap::new();
     charsets.insert(0, b"abc".to_vec());

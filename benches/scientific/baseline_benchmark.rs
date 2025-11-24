@@ -154,7 +154,7 @@ unsafe fn run_single_benchmark(
 /// Run complete benchmark suite with statistical analysis
 pub fn run_baseline_suite() -> Result<HashMap<String, StatisticalSummary>> {
     // Initialize GPU
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
 
@@ -358,7 +358,7 @@ fn main() -> Result<()> {
     println!("=== GPU Scatter-Gather Baseline Benchmarks ===\n");
 
     // Get GPU info first
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
     let gpu_info = format!("{} (Compute Capability {}.{})", device_name, major, minor);

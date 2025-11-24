@@ -199,7 +199,7 @@ fn validate_pattern(gpu: &GpuContext, pattern: &ValidationPattern) -> Result<Val
 
 /// Run complete validation suite
 fn run_validation_suite() -> Result<Vec<ValidationResults>> {
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
 
@@ -379,7 +379,7 @@ fn main() -> Result<()> {
     println!("=== GPU Scatter-Gather Statistical Validation Suite ===\n");
 
     // Get GPU info
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
     let gpu_info = format!("{} (Compute Capability {}.{})", device_name, major, minor);

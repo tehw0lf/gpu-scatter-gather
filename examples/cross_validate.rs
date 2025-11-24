@@ -33,7 +33,7 @@ fn main() -> Result<()> {
 
     // Generate with our GPU implementation
     println!("Generating with GPU implementation...");
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
 
     let mut charsets = std::collections::HashMap::new();
     charsets.insert(0, charset1.as_bytes().to_vec());

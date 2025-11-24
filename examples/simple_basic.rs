@@ -34,7 +34,7 @@ fn main() -> Result<()> {
     // Step 1: Create a GPU context
     // This initializes CUDA and loads the GPU kernels
     println!("📡 Initializing GPU context...");
-    let gpu = GpuContext::new()?;
+    let mut gpu = GpuContext::new()?;
     println!("   ✅ GPU initialized successfully\n");
 
     // Step 2: Define character sets

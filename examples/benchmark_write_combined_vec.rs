@@ -34,13 +34,13 @@ fn main() -> Result<()> {
     charsets.insert(0, lowercase.as_bytes().to_vec());  // ?l (index 0)
     charsets.insert(1, digits.as_bytes().to_vec());      // ?d (index 1)
 
-    // Test configuration: 8-char password (mask as indices)
-    let mask = vec![0, 0, 0, 0, 1, 1, 1, 1];  // Equivalent to ?l?l?l?l?d?d?d?d
+    // Test configuration: 12-char password (mask as indices)
+    let mask = vec![0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1];  // Equivalent to ?l?l?l?l?l?l?l?l?d?d?d?d
     let batch_size = 50_000_000u64; // 50M words
-    let word_length = 8;
+    let word_length = 12;
 
     println!("Configuration:");
-    println!("  Mask: ?l?l?l?l?d?d?d?d (4 lowercase + 4 digits)");
+    println!("  Mask: ?l?l?l?l?l?l?l?l?d?d?d?d (8 lowercase + 4 digits)");
     println!("  Batch size: {} words", batch_size);
     println!("  Word length: {} bytes", word_length);
     println!("  Total data: {:.2} MB", (batch_size * word_length as u64) as f64 / 1_000_000.0);

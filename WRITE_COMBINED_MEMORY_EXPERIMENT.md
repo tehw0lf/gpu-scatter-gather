@@ -20,10 +20,12 @@ Write-combined (WC) memory might improve performance for write-only access patte
 
 ### Test Configuration
 - **GPU:** RTX 4070 Ti SUPER
-- **Pattern:** `?l?l?l?l?d?d?d?d` (8-char, 4 lowercase + 4 digits)
-- **Batch size:** 50M words (400 MB data)
+- **Pattern:** `?l?l?l?l?l?l?l?l?d?d?d?d` (12-char, 8 lowercase + 4 digits - **realistic**)
+- **Batch size:** 50M words (600 MB data)
 - **Iterations:** 5 per benchmark
 - **Output format:** PACKED (no separators)
+
+**Note**: 12-character passwords are more realistic for modern security requirements than 8-character.
 
 ### Implementation
 Modified `PinnedBuffer::new()` in `src/multigpu.rs`:
@@ -54,27 +56,38 @@ Two access patterns tested:
 
 ## Results
 
-### File I/O Pattern
+### File I/O Pattern (12-char passwords)
 
 | Metric | Baseline (PORTABLE) | Experimental (WC) | Change |
 |--------|--------------------:|------------------:|-------:|
-| **Throughput** | 345.08 M words/s | 57.81 M words/s | **-83.2%** ❌ |
-| **Bandwidth** | 2.76 GB/s | 0.46 GB/s | **-83.3%** ❌ |
-| **Std Dev** | 0.014s (9.73%) | 0.016s (1.90%) | More consistent, but much slower |
+| **Throughput** | 242.78 M words/s | 37.83 M words/s | **-84.4%** ❌ |
+| **Bandwidth** | 2.91 GB/s | 0.45 GB/s | **-84.5%** ❌ |
+| **Std Dev** | 0.005s (2.30%) | 0.005s (0.41%) | More consistent, but much slower |
 
-**Raw timings (baseline):** 0.140s, 0.134s, 0.130s, 0.153s, 0.168s
-**Raw timings (experimental):** 0.848s, 0.871s, 0.843s, 0.882s, 0.881s
+**Raw timings (baseline):** 0.209s, 0.200s, 0.213s, 0.201s, 0.207s
+**Raw timings (experimental):** 1.324s, 1.327s, 1.320s, 1.326s, 1.312s
 
-### Vec Collection Pattern
+### Vec Collection Pattern (12-char passwords)
 
 | Metric | Baseline (PORTABLE) | Experimental (WC) | Change |
 |--------|--------------------:|------------------:|-------:|
-| **Throughput** | 290.38 M words/s | 41.06 M words/s | **-85.9%** ❌ |
-| **Bandwidth** | 2.32 GB/s | 0.33 GB/s | **-85.8%** ❌ |
-| **Std Dev** | 0.046s (26.87%) | 0.016s (1.34%) | More consistent, but much slower |
+| **Throughput** | 182.64 M words/s | 27.29 M words/s | **-85.1%** ❌ |
+| **Bandwidth** | 2.19 GB/s | 0.33 GB/s | **-84.9%** ❌ |
+| **Std Dev** | 0.046s (16.99%) | 0.027s (1.47%) | More consistent, but much slower |
 
-**Raw timings (baseline):** 0.148s, 0.147s, 0.143s, 0.264s, 0.158s
-**Raw timings (experimental):** 1.234s, 1.225s, 1.224s, 1.219s, 1.187s
+**Raw timings (baseline):** 0.293s, 0.288s, 0.342s, 0.235s, 0.210s
+**Raw timings (experimental):** 1.779s, 1.838s, 1.843s, 1.853s, 1.848s
+
+### Summary: 12-Char vs 8-Char Results
+
+Both password lengths show **catastrophic regression** with write-combined memory:
+
+| Pattern | 8-char Regression | 12-char Regression | Conclusion |
+|---------|------------------:|-------------------:|------------|
+| File I/O | -83.2% | -84.4% | **Slightly worse** with realistic passwords |
+| Vec Collection | -85.9% | -85.1% | **Similarly bad** across lengths |
+
+**Key Finding**: The regression is **consistent across password lengths**, proving this is a fundamental incompatibility with GPU→Host transfers, not a workload-specific issue.
 
 ---
 
@@ -84,9 +97,10 @@ Two access patterns tested:
 
 The hypothesis was **completely wrong**:
 
-1. **File I/O (write-only) regressed by 83%** instead of improving by 5-15%
-2. **Vec collection (read-write) regressed by 86%** instead of 0-5%
+1. **File I/O (write-only) regressed by 84%** instead of improving by 5-15%
+2. **Vec collection (read-write) regressed by 85%** instead of 0-5%
 3. **Both patterns suffered massive slowdowns**, not just the read-heavy one
+4. **Realistic 12-char passwords showed the same catastrophic regression** as 8-char
 
 ### Root Cause Analysis
 

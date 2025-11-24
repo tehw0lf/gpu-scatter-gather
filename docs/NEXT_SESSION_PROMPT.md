@@ -1,88 +1,43 @@
-# Next Session: v1.5.0 Released - Optimization Phase Complete
+# Next Session: Baseline Validation & Future Optimization Planning
 
 **Status**: ✅ **v1.5.0 RELEASED** (November 24, 2025)
 **Repository**: https://github.com/tehw0lf/gpu-scatter-gather
 **Current Version**: v1.5.0
 **Last Release**: v1.5.0 - https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.5.0
-**Next Steps**: Research optimizations or feature development
+**Next Steps**: Validate baseline performance with 16-char passwords, then explore research optimizations
 
 ---
 
-## v1.5.0 Release Summary ✅
+## Immediate Priority: Baseline Validation
 
-### What Was Released
-**Dynamic load balancing** for heterogeneous multi-GPU setups:
+### Task: Benchmark Main Branch with 16-Char Passwords
 
-- **Adaptive workload distribution** based on per-GPU performance
-- **5-10% improvement** for mixed GPU configurations (e.g., RTX 4070 + RTX 3060)
-- **Automatic fallback** to static partitioning until reliable estimates available
-- **Zero overhead** for single-GPU or homogeneous multi-GPU setups
+**Goal**: Establish baseline performance metrics with realistic 16-character passwords on main branch (PORTABLE-only pinned memory).
 
-### Key Features
-- **GpuStats tracking**: Per-GPU throughput monitoring with exponential moving average
-- **Adaptive partitioning**: Work distribution proportional to measured GPU speed
-- **Backward compatible**: No API changes, works automatically
-- **100% test coverage**: All 48 tests passing + 6 new tests for load balancing
+**Why**:
+- Write-combined memory experiment tested 8, 12, and 16-char passwords
+- Need to validate main branch performance with same 16-char pattern
+- Provides reference point for future optimizations
 
-### Git Commits
-- `6a6ff18` - Version bump to v1.5.0
-- `eac2a2e` - Dynamic load balancing implementation
+**Expected Results** (based on v1.4.0 numbers):
+- 16-char passwords: ~450-500 M words/s
+- Slightly lower than 8-char (771 M/s) due to larger data size
+- Should be significantly faster than WC memory experiment baseline (184-224 M/s)
 
-### Performance
-- **8-char passwords**: 771 M words/s (maintained from v1.4.0)
-- **10-char passwords**: 554 M words/s (maintained from v1.4.0)
-- **12-char passwords**: 497 M words/s (maintained from v1.4.0)
+**Steps**:
+```bash
+# 1. Run existing benchmark with 16-char pattern
+cargo build --release --example benchmark_realistic
+./target/release/examples/benchmark_realistic
 
----
-
-## Recent Experimental Work ✅
-
-### Write-Combined Memory Experiment (November 24, 2025)
-
-**Status**: ❌ **REJECTED** - Catastrophic performance regression
-
-**Hypothesis**: WC memory might improve GPU→Host transfers for write-only patterns
-
-**Results**:
-- File I/O pattern: 345 → 58 M words/s (**-83%** regression)
-- Vec collection: 290 → 41 M words/s (**-86%** regression)
-
-**Conclusion**: Write-combined memory (`CU_MEMHOSTALLOC_WRITECOMBINED`) is optimized for CPU→GPU writes, not GPU→Host transfers. Current PORTABLE-only pinned memory is already optimal.
-
-**Artifacts**:
-- `WRITE_COMBINED_MEMORY_EXPERIMENT.md` - Comprehensive analysis
-- `examples/benchmark_write_combined_*.rs` - Benchmark code
-- Baseline and experimental JSON results
-
-**Recommendation**: Keep current implementation (PORTABLE flag only). Never use WRITECOMBINED for this use case.
+# Or create specific 16-char benchmark if needed
+# 2. Document baseline in CHANGELOG or development logs
+# 3. Use as reference for any future optimizations
+```
 
 ---
 
-## Completed Optimization Roadmap
-
-### ✅ Phase 1: Pinned Memory (v1.4.0)
-- 1GB pinned buffers per GPU worker
-- 2× faster PCIe transfers
-- **Result**: +65-75% throughput improvement
-
-### ✅ Phase 2: Zero-Copy Callback API (v1.4.0)
-- `generate_batch_with()` for direct processing
-- Eliminates intermediate Vec allocations
-- **Result**: Maximum performance for file I/O and streaming
-
-### ✅ Phase 3: Dynamic Load Balancing (v1.5.0)
-- Adaptive workload distribution for heterogeneous GPUs
-- Automatic performance-based partitioning
-- **Result**: 5-10% improvement for mixed GPU setups
-
-### ✅ Phase 4: Memory Flag Validation (v1.5.0)
-- Tested write-combined memory hypothesis
-- Validated current implementation is optimal
-- **Result**: No changes needed, current approach confirmed best
-
----
-
-## Remaining Research Opportunities
+## Research Opportunities (Post-Baseline)
 
 ### Priority 1: Memory Coalescing Research (High Risk/Reward)
 **Goal**: 2-3× potential improvement through kernel optimization
@@ -183,7 +138,7 @@ impl GpuContext {
 
 ### Core Documentation
 - `CHANGELOG.md` - Complete version history (up to v1.5.0)
-- `WRITE_COMBINED_MEMORY_EXPERIMENT.md` - Failed experiment analysis
+- `WRITE_COMBINED_MEMORY_EXPERIMENT.md` - Comprehensive WC memory experiment (8, 12, 16-char results)
 - `docs/design/FORMAL_SPECIFICATION.md` - Mathematical foundation
 - `docs/design/PINNED_MEMORY_DESIGN.md` - Pinned memory technical spec
 
@@ -194,7 +149,7 @@ impl GpuContext {
 ### Benchmarking
 - `docs/benchmarking/BASELINE_BENCHMARKING_PLAN.md` - Performance methodology
 - `examples/benchmark_realistic.rs` - Primary performance benchmark
-- `examples/benchmark_write_combined_*.rs` - Experimental benchmarks
+- `examples/benchmark_write_combined_*.rs` - Experimental benchmarks (16-char configured)
 
 ### Key Implementation Files
 - `src/multigpu.rs` - Multi-GPU context, pinned memory, load balancing
@@ -209,6 +164,9 @@ impl GpuContext {
 # Latest commits
 git log --oneline -10
 
+4a359e5 test(experiment): Add 16-char password testing - regression worsens with length
+84dc164 fix(experiment): Re-test write-combined memory with realistic 12-char passwords
+2b4c4c3 docs: Update NEXT_SESSION_PROMPT and CHANGELOG for v1.5.0 completion
 ae8d1f3 docs(experiment): Document write-combined memory experiment results
 8b9f71b chore: Remove obsolete release notes files
 6a6ff18 chore: Bump version to v1.5.0
@@ -216,9 +174,6 @@ eac2a2e feat(perf): Add dynamic load balancing for heterogeneous GPUs
 a04b63f chore: Bump version to v1.4.0
 45c5858 docs: Update NEXT_SESSION_PROMPT for v1.4.0 release readiness
 e2e592d feat(perf): Add zero-copy callback API - Phase 3 of 3 COMPLETE
-903e6be feat(perf): Complete pinned memory optimization - Phase 2 of 3
-32b9464 wip: Pinned memory optimization - Phase 1 of 3 (Foundation)
-1782ee2 chore: Release v1.3.0 - Persistent worker threads + documentation
 
 # Tags
 git tag -l
@@ -233,9 +188,45 @@ v1.5.0  # ← Latest release
 
 ---
 
+## Performance Summary
+
+### Current Baseline (v1.4.0/v1.5.0 - PORTABLE-only)
+- **8-char passwords**: 771 M words/s
+- **10-char passwords**: 554 M words/s
+- **12-char passwords**: 497 M words/s
+- **16-char passwords**: TBD - needs baseline validation
+
+### Write-Combined Memory Experiment Results
+Comprehensively tested and **rejected**:
+
+| Length | File I/O Baseline | File I/O WC | Vec Baseline | Vec WC | Regression |
+|--------|------------------:|------------:|-------------:|-------:|-----------:|
+| 8-char | 345 M/s | 58 M/s | 290 M/s | 41 M/s | -83% to -86% |
+| 12-char | 243 M/s | 38 M/s | 183 M/s | 27 M/s | -84% to -85% |
+| 16-char | 184 M/s | 28 M/s | 224 M/s | 21 M/s | -85% to -91% |
+
+**Key Finding**: Performance degrades with longer passwords (Vec: 86% → 91% regression).
+
+---
+
 ## Quick Start for Next Session
 
-### Option A: Memory Coalescing Research (High Risk/Reward)
+### Option A: Baseline Validation (Recommended First Step)
+
+**Goal**: Establish 16-char baseline on main branch
+
+**Steps**:
+```bash
+# 1. Check current performance with realistic benchmark
+cargo build --release --example benchmark_realistic
+./target/release/examples/benchmark_realistic
+
+# 2. Or create dedicated 16-char baseline benchmark
+# 3. Document results in CHANGELOG or development log
+# 4. Compare with v1.4.0 numbers (should be ~450-500 M/s for 16-char)
+```
+
+### Option B: Memory Coalescing Research (High Risk/Reward)
 
 **Goal**: Profile and optimize CUDA kernel for 2-3× potential speedup
 
@@ -252,7 +243,7 @@ ncu --set full --export profile.ncu-rep ./target/release/examples/benchmark_real
 # WARNING: May require extensive kernel rewrite with uncertain payoff
 ```
 
-### Option B: Persistent GPU Buffers (Quick Win)
+### Option C: Persistent GPU Buffers (Quick Win)
 
 **Goal**: 1-2% improvement from eliminating repeated allocations
 
@@ -271,7 +262,7 @@ git add src/gpu/mod.rs tests/
 git commit -m "feat(perf): Add persistent GPU buffers to reduce allocation overhead"
 ```
 
-### Option C: Feature Development
+### Option D: Feature Development
 
 **Goal**: Expand capabilities beyond pure performance
 
@@ -281,41 +272,24 @@ Ideas:
 - OpenCL backend for AMD GPUs
 - Python bindings
 
-### Option D: Complete Current Phase
-
-**Goal**: Document, release, and move to other projects
-
-**Steps**:
-```bash
-# 1. Update documentation (already done)
-# 2. Push commits to GitHub
-# 3. Verify v1.5.0 release
-# 4. Consider project complete for now
-```
-
 ---
 
 ## Recommendation
 
-The **optimization phase is effectively complete**:
+**Start with Option A (Baseline Validation)** to establish a clear performance reference point with 16-character passwords on the main branch. This will:
+1. Provide accurate baseline for future optimizations
+2. Validate current performance is as expected
+3. Give context for any future optimization attempts
 
-✅ **Achieved Goals**:
-- 65-75% throughput improvement (v1.4.0)
-- Dynamic load balancing (v1.5.0)
-- Validated current implementation is optimal (WC memory experiment)
-- 771 M words/s for 8-char passwords (RTX 4070 Ti SUPER)
-
-🎯 **Remaining Opportunities**:
-- Memory coalescing research (high risk, high reward)
-- Persistent GPU buffers (1-2% gain, low risk)
-- Feature development (hybrid masks, rules, OpenCL)
-
-**Suggested**: Consider the project feature-complete for the core optimization work. Remaining improvements are either marginal (1-2%) or high-risk research (kernel rewrite). Focus on feature development or move to other projects.
+After baseline validation, the optimization phase is effectively complete. Future work should focus on:
+- Research optimizations (memory coalescing - high risk/reward)
+- Marginal improvements (persistent buffers - 1-2%)
+- Feature development (hybrid masks, rules, OpenCL, Python bindings)
 
 ---
 
 *Last Updated: November 24, 2025*
-*Version: 16.0 (v1.5.0 Released)*
+*Version: 17.0 (v1.5.0 Released, WC Memory Experiment Complete)*
 *Current Branch: main*
-*Status: Optimization phase complete, ready for feature development or research*
-*Next: Optional research optimizations or new features*
+*Status: Ready for baseline validation, then optional research/features*
+*Next: Validate 16-char baseline performance on main branch*

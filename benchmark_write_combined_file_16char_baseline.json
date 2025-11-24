@@ -1,0 +1,35 @@
+{
+  "batch_size": 50000000,
+  "coefficient_of_variation_percent": 2.2902608723398137,
+  "iterations": 5,
+  "mask": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1
+  ],
+  "mean_bandwidth_gbps": 2.941382629068813,
+  "mean_throughput_words_per_sec": 183836414.3168008,
+  "std_dev_seconds": 0.0062290729528510684,
+  "test": "write_combined_file_io",
+  "timings": [
+    0.271987853,
+    0.270836296,
+    0.283681691,
+    0.266699553,
+    0.266699286
+  ],
+  "word_length": 16
+}

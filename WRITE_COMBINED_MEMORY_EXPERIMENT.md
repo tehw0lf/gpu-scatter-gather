@@ -78,16 +78,31 @@ Two access patterns tested:
 **Raw timings (baseline):** 0.293s, 0.288s, 0.342s, 0.235s, 0.210s
 **Raw timings (experimental):** 1.779s, 1.838s, 1.843s, 1.853s, 1.848s
 
-### Summary: 12-Char vs 8-Char Results
+### 16-Char Password Results (Long Passwords)
 
-Both password lengths show **catastrophic regression** with write-combined memory:
+| Metric | Baseline (PORTABLE) | Experimental (WC) | Change |
+|--------|--------------------:|------------------:|-------:|
+| **File I/O Throughput** | 183.84 M words/s | 28.28 M words/s | **-84.6%** ❌ |
+| **File I/O Bandwidth** | 2.94 GB/s | 0.45 GB/s | **-84.7%** ❌ |
+| **Vec Throughput** | 223.52 M words/s | 20.59 M words/s | **-90.8%** ❌ |
+| **Vec Bandwidth** | 3.58 GB/s | 0.33 GB/s | **-90.8%** ❌ |
 
-| Pattern | 8-char Regression | 12-char Regression | Conclusion |
-|---------|------------------:|-------------------:|------------|
-| File I/O | -83.2% | -84.4% | **Slightly worse** with realistic passwords |
-| Vec Collection | -85.9% | -85.1% | **Similarly bad** across lengths |
+**Raw timings (file I/O baseline):** 0.272s, 0.271s, 0.284s, 0.267s, 0.267s
+**Raw timings (file I/O experimental):** 1.753s, 1.763s, 1.792s, 1.760s, 1.772s
 
-**Key Finding**: The regression is **consistent across password lengths**, proving this is a fundamental incompatibility with GPU→Host transfers, not a workload-specific issue.
+**Raw timings (vec baseline):** 0.185s, 0.371s, 0.187s, 0.192s, 0.183s
+**Raw timings (vec experimental):** 2.390s, 2.405s, 2.384s, 2.489s, 2.473s
+
+### Summary: Regression Across All Password Lengths
+
+Write-combined memory causes **catastrophic regression** that **worsens with longer passwords**:
+
+| Pattern | 8-char | 12-char | 16-char | Trend |
+|---------|-------:|--------:|--------:|-------|
+| **File I/O** | -83.2% | -84.4% | **-84.6%** | ⬇️ Slightly worse |
+| **Vec Collection** | -85.9% | -85.1% | **-90.8%** | ⬇️ **Significantly worse** |
+
+**Critical Finding**: The Vec collection pattern shows **degrading performance** with longer passwords (85% → 91% regression). This suggests write-combined memory becomes increasingly inefficient as transfer sizes grow.
 
 ---
 
@@ -97,10 +112,11 @@ Both password lengths show **catastrophic regression** with write-combined memor
 
 The hypothesis was **completely wrong**:
 
-1. **File I/O (write-only) regressed by 84%** instead of improving by 5-15%
-2. **Vec collection (read-write) regressed by 85%** instead of 0-5%
+1. **File I/O (write-only) regressed by 84-85%** instead of improving by 5-15%
+2. **Vec collection (read-write) regressed by 85-91%** instead of 0-5%
 3. **Both patterns suffered massive slowdowns**, not just the read-heavy one
-4. **Realistic 12-char passwords showed the same catastrophic regression** as 8-char
+4. **Regression worsens with longer passwords** (Vec: 86% → 91% from 8 to 16 chars)
+5. **16-char passwords hit 91% regression** - nearly 10× slowdown
 
 ### Root Cause Analysis
 

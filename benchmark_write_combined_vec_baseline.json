@@ -1,0 +1,27 @@
+{
+  "batch_size": 50000000,
+  "coefficient_of_variation_percent": 26.874008620188956,
+  "iterations": 5,
+  "mask": [
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1
+  ],
+  "mean_bandwidth_gbps": 2.323056082118806,
+  "mean_throughput_words_per_sec": 290382010.2648508,
+  "std_dev_seconds": 0.04627354255809061,
+  "test": "write_combined_vec_collection",
+  "timings": [
+    0.147688668,
+    0.14722505,
+    0.143375461,
+    0.264188728,
+    0.158456969
+  ],
+  "word_length": 8
+}

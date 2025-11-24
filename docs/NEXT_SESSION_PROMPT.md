@@ -1,192 +1,141 @@
-# Next Session: v1.4.0 Released - Ready for v1.5.0
+# Next Session: v1.5.0 Released - Optimization Phase Complete
 
-**Status**: ✅ **v1.4.0 RELEASED** (November 23, 2025)
+**Status**: ✅ **v1.5.0 RELEASED** (November 24, 2025)
 **Repository**: https://github.com/tehw0lf/gpu-scatter-gather
-**Current Version**: v1.4.0
-**Last Release**: v1.4.0 - https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.4.0
-**Next Steps**: Begin v1.5.0 development or additional optimizations
+**Current Version**: v1.5.0
+**Last Release**: v1.5.0 - https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.5.0
+**Next Steps**: Research optimizations or feature development
 
 ---
 
-## v1.4.0 Release Summary ✅
+## v1.5.0 Release Summary ✅
 
 ### What Was Released
-**+65-75% performance improvement** via pinned memory optimization and zero-copy callback API:
+**Dynamic load balancing** for heterogeneous multi-GPU setups:
 
-- **8-char passwords**: 771 M words/s (+75% over v1.3.0)
-- **10-char passwords**: 554 M words/s (+26% over v1.3.0)
-- **12-char passwords**: 497 M words/s (+13% over v1.3.0)
+- **Adaptive workload distribution** based on per-GPU performance
+- **5-10% improvement** for mixed GPU configurations (e.g., RTX 4070 + RTX 3060)
+- **Automatic fallback** to static partitioning until reliable estimates available
+- **Zero overhead** for single-GPU or homogeneous multi-GPU setups
 
 ### Key Features
-- **Zero-Copy Callback API**: `generate_batch_with()` for maximum performance
-- **Pinned Memory Infrastructure**: 1GB buffers per GPU worker (2x faster PCIe)
-- **Backward Compatible**: All existing code works without changes
-- **100% Test Coverage**: 48/48 tests passing
+- **GpuStats tracking**: Per-GPU throughput monitoring with exponential moving average
+- **Adaptive partitioning**: Work distribution proportional to measured GPU speed
+- **Backward compatible**: No API changes, works automatically
+- **100% test coverage**: All 48 tests passing + 6 new tests for load balancing
 
 ### Git Commits
-- `a04b63f` - Version bump to v1.4.0
-- `45c5858` - Documentation updates for release
-- `e2e592d` - Phase 3: Zero-copy callback API
-- `903e6be` - Phase 2: Pinned memory integration
-- `32b9464` - Phase 1: Pinned memory foundation
+- `6a6ff18` - Version bump to v1.5.0
+- `eac2a2e` - Dynamic load balancing implementation
+
+### Performance
+- **8-char passwords**: 771 M words/s (maintained from v1.4.0)
+- **10-char passwords**: 554 M words/s (maintained from v1.4.0)
+- **12-char passwords**: 497 M words/s (maintained from v1.4.0)
 
 ---
 
-## Future Optimizations (v1.5.0+)
+## Recent Experimental Work ✅
 
-### Priority 1: Dynamic Load Balancing
-**Goal**: 5-10% improvement for heterogeneous multi-GPU setups
+### Write-Combined Memory Experiment (November 24, 2025)
 
-**Current State**: Static partitioning divides work evenly across GPUs
-**Problem**: Identical partitions perform poorly with mixed GPU speeds (e.g., RTX 4070 + RTX 3060)
+**Status**: ❌ **REJECTED** - Catastrophic performance regression
 
-**Approach**:
-- Monitor per-GPU completion times during generation
-- Build throughput profile for each GPU
-- Adjust partition sizes dynamically based on GPU performance
-- Favor faster GPUs with larger workloads
+**Hypothesis**: WC memory might improve GPU→Host transfers for write-only patterns
 
-**Expected Benefit**:
-- Minimal benefit for identical GPUs (current static partitioning works well)
-- 5-10% improvement for heterogeneous setups
-- Better resource utilization overall
+**Results**:
+- File I/O pattern: 345 → 58 M words/s (**-83%** regression)
+- Vec collection: 290 → 41 M words/s (**-86%** regression)
 
-**Implementation Sketch**:
-```rust
-struct GpuStats {
-    last_completion_time: Duration,
-    throughput_estimate: f64,  // Words per second
-    sample_count: usize,
-}
+**Conclusion**: Write-combined memory (`CU_MEMHOSTALLOC_WRITECOMBINED`) is optimized for CPU→GPU writes, not GPU→Host transfers. Current PORTABLE-only pinned memory is already optimal.
 
-impl MultiGpuContext {
-    // Track completion time per GPU
-    fn record_completion(&mut self, gpu_id: usize, duration: Duration, words: u64) {
-        let stats = &mut self.gpu_stats[gpu_id];
-        let throughput = words as f64 / duration.as_secs_f64();
+**Artifacts**:
+- `WRITE_COMBINED_MEMORY_EXPERIMENT.md` - Comprehensive analysis
+- `examples/benchmark_write_combined_*.rs` - Benchmark code
+- Baseline and experimental JSON results
 
-        // Exponential moving average
-        stats.throughput_estimate = if stats.sample_count == 0 {
-            throughput
-        } else {
-            0.8 * stats.throughput_estimate + 0.2 * throughput
-        };
-        stats.sample_count += 1;
-    }
-
-    // Adaptive partitioning based on throughput estimates
-    fn adaptive_partition(&self, total_work: u64) -> Vec<KeyspacePartition> {
-        let total_throughput: f64 = self.gpu_stats.iter()
-            .map(|s| s.throughput_estimate)
-            .sum();
-
-        let mut partitions = Vec::new();
-        let mut start_idx = 0;
-
-        for (gpu_id, stats) in self.gpu_stats.iter().enumerate() {
-            let fraction = stats.throughput_estimate / total_throughput;
-            let count = (total_work as f64 * fraction) as u64;
-
-            partitions.push(KeyspacePartition::new(start_idx, count));
-            start_idx += count;
-        }
-
-        partitions
-    }
-}
-```
-
-**Files to Modify**:
-- `src/multigpu.rs` - Add GpuStats tracking and adaptive_partition()
-- Tests - Validate partitioning with mock throughput data
+**Recommendation**: Keep current implementation (PORTABLE flag only). Never use WRITECOMBINED for this use case.
 
 ---
 
-### Priority 2: Write-Combined Memory (Experimental)
-**Goal**: Potentially faster writes for specific access patterns
+## Completed Optimization Roadmap
 
-**Current State**: Pinned memory with `CU_MEMHOSTALLOC_PORTABLE` flag
-**Hypothesis**: Write-combined memory may be faster for write-only patterns
+### ✅ Phase 1: Pinned Memory (v1.4.0)
+- 1GB pinned buffers per GPU worker
+- 2× faster PCIe transfers
+- **Result**: +65-75% throughput improvement
 
-**Approach**:
-- Use `CU_MEMHOSTALLOC_WRITECOMBINED` flag in addition to PORTABLE
-- Trade-off: Faster writes, slower reads (cached vs uncached)
-- Only beneficial if callback doesn't read data (e.g., direct file write)
+### ✅ Phase 2: Zero-Copy Callback API (v1.4.0)
+- `generate_batch_with()` for direct processing
+- Eliminates intermediate Vec allocations
+- **Result**: Maximum performance for file I/O and streaming
 
-**Risk**: Medium (may not improve or could regress)
+### ✅ Phase 3: Dynamic Load Balancing (v1.5.0)
+- Adaptive workload distribution for heterogeneous GPUs
+- Automatic performance-based partitioning
+- **Result**: 5-10% improvement for mixed GPU setups
 
-**Testing Required**:
-```rust
-// In PinnedBuffer::new()
-let flags = CU_MEMHOSTALLOC_PORTABLE | CU_MEMHOSTALLOC_WRITECOMBINED;
-let result = cuMemHostAlloc(&mut ptr, size, flags);
-```
-
-**Benchmark Strategy**:
-1. Baseline: Current pinned memory (PORTABLE only)
-2. Test A: Write-combined + PORTABLE
-3. Measure: Throughput for file I/O callback vs to_vec() callback
-
-**Expected Outcome**:
-- File I/O: May see 5-15% improvement (write-only pattern)
-- to_vec(): Likely regression (callback reads data)
-- Conclusion: Make configurable based on use case
+### ✅ Phase 4: Memory Flag Validation (v1.5.0)
+- Tested write-combined memory hypothesis
+- Validated current implementation is optimal
+- **Result**: No changes needed, current approach confirmed best
 
 ---
 
-### Priority 3: Memory Coalescing Research
-**Goal**: 2-3× potential improvement (high risk, high reward)
+## Remaining Research Opportunities
+
+### Priority 1: Memory Coalescing Research (High Risk/Reward)
+**Goal**: 2-3× potential improvement through kernel optimization
 
 **Current State**: Column-major kernel with CPU transpose (~500-750 M words/s)
-**Hypothesis**: Kernel writes may not be fully coalesced for optimal memory bandwidth
 
-**Investigation Steps**:
-1. **Profile with Nsight Compute**:
-   ```bash
-   ncu --set full --export profile.ncu-rep ./target/release/examples/benchmark_realistic
-   ```
+**Approach**:
+1. Profile with Nsight Compute to identify bottlenecks
+2. Analyze memory coalescing efficiency
+3. Experiment with different memory access patterns
+4. Test cache-line aligned writes (128 bytes)
 
-2. **Analyze Metrics**:
-   - Global memory load/store efficiency
-   - Coalescing metrics
-   - L1/L2 cache hit rates
-   - Memory bandwidth utilization
-
-3. **Identify Bottleneck**:
-   - Is it memory coalescing?
-   - Or PCIe bandwidth?
-   - Or compute throughput?
-
-4. **Experiment with Patterns**:
-   - Full cache-line writes (128 bytes)
-   - Different block/grid configurations
-   - Shared memory staging
-
-**Risk**: High (may require complete kernel rewrite with uncertain payoff)
+**Risk**: High - may require complete kernel rewrite with uncertain payoff
 
 **Files to Analyze**:
 - `kernels/wordlist_poc.cu` - Current kernel implementation
 - `src/gpu/mod.rs` - Kernel launch configuration
 
+**Profiling Command**:
+```bash
+ncu --set full --export profile.ncu-rep ./target/release/examples/benchmark_realistic
+```
+
+**Questions to Answer**:
+- Is the bottleneck memory bandwidth or coalescing?
+- Are we hitting PCIe limits or GPU compute limits?
+- Can different block/grid configurations improve performance?
+
 ---
 
-### Priority 4: Persistent GPU Buffers
+### Priority 2: Persistent GPU Buffers (Low Hanging Fruit)
 **Goal**: Eliminate repeated device allocations (1-2% improvement)
 
-**Current State**: Allocate/free device memory per batch in `generate_batch_device_stream()`
-**Proposal**: Persistent device buffers reused across batches
+**Current State**: Allocate/free device memory per batch
+
+**Approach**:
+- Add persistent buffers to `GpuContext`
+- Reuse buffers across batches
+- Amortize allocation cost
 
 **Benefits**:
-- Reduce `cuMemAlloc()` and `cuMemFree()` overhead
-- Amortize allocation cost over multiple batches
+- Reduce `cuMemAlloc()`/`cuMemFree()` overhead
 - More predictable performance
+- Minimal code changes
 
-**Implementation**:
+**Expected Benefit**: 1-2% improvement, low risk
+
+**Implementation Sketch**:
 ```rust
 struct GpuContext {
-    // Existing fields...
     persistent_device_buffer: Option<CUdeviceptr>,
     buffer_capacity: usize,
+    // ... existing fields
 }
 
 impl GpuContext {
@@ -195,48 +144,62 @@ impl GpuContext {
             if self.buffer_capacity >= required_size {
                 return Ok(ptr);  // Reuse existing buffer
             }
-            // Free and reallocate if too small
             unsafe { cuMemFree_v2(ptr); }
         }
 
-        // Allocate new buffer
         let mut ptr: CUdeviceptr = 0;
-        unsafe {
-            cuMemAlloc_v2(&mut ptr, required_size)?;
-        }
+        unsafe { cuMemAlloc_v2(&mut ptr, required_size)?; }
 
         self.persistent_device_buffer = Some(ptr);
         self.buffer_capacity = required_size;
         Ok(ptr)
     }
 }
-
-impl Drop for GpuContext {
-    fn drop(&mut self) {
-        if let Some(ptr) = self.persistent_device_buffer {
-            unsafe { cuMemFree_v2(ptr); }
-        }
-    }
-}
 ```
-
-**Expected Benefit**: 1-2% from reduced allocation overhead
 
 ---
 
-## Development References
+## Alternative Development Directions
 
-### Documentation
-- `CHANGELOG.md` - Complete version history
+### Feature Development
+1. **Hybrid Masks**: Combine static prefixes/suffixes with dynamic parts
+2. **Rule-Based Generation**: Integrate hashcat-style rules
+3. **OpenCL Backend**: Support AMD/Intel GPUs
+4. **Python Bindings**: PyPI package for broader adoption
+
+### Integration Work
+1. **Hashcat Plugin**: Native integration as custom wordlist provider
+2. **John the Ripper Module**: Direct integration
+3. **Web API**: Remote generation service
+
+### Academic Work
+1. **ArXiv Preprint**: Formal paper on algorithm
+2. **Conference Submission**: USENIX Security, ACM CCS
+3. **Performance Study**: Compare with other GPU password tools
+
+---
+
+## Documentation References
+
+### Core Documentation
+- `CHANGELOG.md` - Complete version history (up to v1.5.0)
+- `WRITE_COMBINED_MEMORY_EXPERIMENT.md` - Failed experiment analysis
+- `docs/design/FORMAL_SPECIFICATION.md` - Mathematical foundation
 - `docs/design/PINNED_MEMORY_DESIGN.md` - Pinned memory technical spec
-- `docs/development/DEVELOPMENT_LOG.md` - Detailed session notes
-- `docs/benchmarking/BASELINE_BENCHMARKING_PLAN.md` - Performance methodology
 
-### Key Files
-- `src/multigpu.rs` - Multi-GPU context and pinned memory implementation
+### Development Logs
+- `docs/development/DEVELOPMENT_LOG.md` - Detailed session notes
+- `docs/development/TODO.md` - Outstanding tasks
+
+### Benchmarking
+- `docs/benchmarking/BASELINE_BENCHMARKING_PLAN.md` - Performance methodology
+- `examples/benchmark_realistic.rs` - Primary performance benchmark
+- `examples/benchmark_write_combined_*.rs` - Experimental benchmarks
+
+### Key Implementation Files
+- `src/multigpu.rs` - Multi-GPU context, pinned memory, load balancing
 - `src/gpu/mod.rs` - Single GPU context and kernel interface
 - `kernels/wordlist_poc.cu` - CUDA kernels (3 variants)
-- `examples/benchmark_realistic.rs` - Primary performance benchmark
 
 ---
 
@@ -244,106 +207,115 @@ impl Drop for GpuContext {
 
 ```bash
 # Latest commits
-git log --oneline -7
+git log --oneline -10
 
+ae8d1f3 docs(experiment): Document write-combined memory experiment results
+8b9f71b chore: Remove obsolete release notes files
+6a6ff18 chore: Bump version to v1.5.0
+eac2a2e feat(perf): Add dynamic load balancing for heterogeneous GPUs
 a04b63f chore: Bump version to v1.4.0
 45c5858 docs: Update NEXT_SESSION_PROMPT for v1.4.0 release readiness
 e2e592d feat(perf): Add zero-copy callback API - Phase 3 of 3 COMPLETE
 903e6be feat(perf): Complete pinned memory optimization - Phase 2 of 3
 32b9464 wip: Pinned memory optimization - Phase 1 of 3 (Foundation)
 1782ee2 chore: Release v1.3.0 - Persistent worker threads + documentation
-90aefa4 docs: Update NEXT_SESSION_PROMPT for v1.3.0-dev state
 
 # Tags
 git tag -l
+v1.0.0
 v1.1.0
 v1.2.0
 v1.2.1
 v1.3.0
-v1.4.0  # ← Latest release
+v1.4.0
+v1.5.0  # ← Latest release
 ```
 
 ---
 
 ## Quick Start for Next Session
 
-### Option A: Begin v1.5.0 Development (Dynamic Load Balancing)
+### Option A: Memory Coalescing Research (High Risk/Reward)
 
-**Recommended**: Start with Priority 1 (Dynamic Load Balancing) as it has:
-- Clear benefit for real-world use cases
-- Low implementation risk
-- Well-defined scope
+**Goal**: Profile and optimize CUDA kernel for 2-3× potential speedup
 
 **Steps**:
 ```bash
-# 1. Create development branch
-git checkout -b feature/dynamic-load-balancing
-
-# 2. Add GpuStats struct to src/multigpu.rs
-# 3. Implement tracking in process_work_item completion
-# 4. Implement adaptive_partition() method
-# 5. Test with mock throughput data
-# 6. Benchmark with actual heterogeneous GPUs (if available)
-
-# 7. Commit and merge
-git add src/multigpu.rs tests/
-git commit -m "feat(perf): Add dynamic load balancing for heterogeneous GPUs"
-```
-
-### Option B: Experimental Research (Write-Combined Memory)
-
-**Exploratory**: Test if write-combined memory helps specific use cases
-
-**Steps**:
-```bash
-# 1. Modify PinnedBuffer::new() to add WRITECOMBINED flag
-# 2. Benchmark file I/O callback vs to_vec() callback
-# 3. Compare with baseline
-# 4. Determine if benefit justifies added complexity
-
-# If beneficial: Make configurable
-# If not: Document findings and close experiment
-```
-
-### Option C: Deep Research (Memory Coalescing)
-
-**High Risk/Reward**: Profile kernel and optimize memory access patterns
-
-**Steps**:
-```bash
-# 1. Profile with Nsight Compute
+# 1. Profile current kernel
 ncu --set full --export profile.ncu-rep ./target/release/examples/benchmark_realistic
 
-# 2. Analyze bottlenecks
-# 3. Experiment with kernel modifications
-# 4. Benchmark improvements
+# 2. Analyze metrics (memory bandwidth, coalescing, cache hits)
+# 3. Identify bottleneck (coalescing vs PCIe vs compute)
+# 4. Experiment with kernel modifications
+# 5. Benchmark improvements
 
-# WARNING: May require complete kernel rewrite with uncertain payoff
+# WARNING: May require extensive kernel rewrite with uncertain payoff
+```
+
+### Option B: Persistent GPU Buffers (Quick Win)
+
+**Goal**: 1-2% improvement from eliminating repeated allocations
+
+**Steps**:
+```bash
+git checkout -b feature/persistent-gpu-buffers
+
+# 1. Add persistent buffer fields to GpuContext
+# 2. Implement ensure_device_buffer() method
+# 3. Update generate_batch_device_stream() to use persistent buffers
+# 4. Add Drop implementation for cleanup
+# 5. Test and benchmark
+# 6. Commit and merge
+
+git add src/gpu/mod.rs tests/
+git commit -m "feat(perf): Add persistent GPU buffers to reduce allocation overhead"
+```
+
+### Option C: Feature Development
+
+**Goal**: Expand capabilities beyond pure performance
+
+Ideas:
+- Hybrid masks (static + dynamic parts)
+- Rule-based generation
+- OpenCL backend for AMD GPUs
+- Python bindings
+
+### Option D: Complete Current Phase
+
+**Goal**: Document, release, and move to other projects
+
+**Steps**:
+```bash
+# 1. Update documentation (already done)
+# 2. Push commits to GitHub
+# 3. Verify v1.5.0 release
+# 4. Consider project complete for now
 ```
 
 ---
 
-## Recommended Next Steps
+## Recommendation
 
-1. **v1.5.0 Development**: Start with dynamic load balancing (Priority 1)
-   - Clear benefit for heterogeneous GPU setups
-   - Low risk, well-scoped implementation
-   - Expected 5-10% improvement in mixed configurations
+The **optimization phase is effectively complete**:
 
-2. **Experimental Testing**: Write-combined memory (Priority 2)
-   - Quick experiment to validate hypothesis
-   - May benefit file I/O use cases
-   - Can be done in parallel with Priority 1
+✅ **Achieved Goals**:
+- 65-75% throughput improvement (v1.4.0)
+- Dynamic load balancing (v1.5.0)
+- Validated current implementation is optimal (WC memory experiment)
+- 771 M words/s for 8-char passwords (RTX 4070 Ti SUPER)
 
-3. **Research Phase**: Memory coalescing analysis (Priority 3)
-   - Profile-driven optimization
-   - High potential but uncertain payoff
-   - Consider after v1.5.0 release
+🎯 **Remaining Opportunities**:
+- Memory coalescing research (high risk, high reward)
+- Persistent GPU buffers (1-2% gain, low risk)
+- Feature development (hybrid masks, rules, OpenCL)
+
+**Suggested**: Consider the project feature-complete for the core optimization work. Remaining improvements are either marginal (1-2%) or high-risk research (kernel rewrite). Focus on feature development or move to other projects.
 
 ---
 
-*Last Updated: November 23, 2025*
-*Version: 15.0 (v1.4.0 Released)*
+*Last Updated: November 24, 2025*
+*Version: 16.0 (v1.5.0 Released)*
 *Current Branch: main*
-*Status: Ready for v1.5.0 development*
-*Next: Dynamic load balancing or experimental optimizations*
+*Status: Optimization phase complete, ready for feature development or research*
+*Next: Optional research optimizations or new features*

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Experimental Work
+
+#### Write-Combined Memory Experiment (2025-11-24)
+**Status**: ❌ Rejected - Catastrophic performance regression
+
+Tested `CU_MEMHOSTALLOC_WRITECOMBINED` flag for potential performance improvement in GPU→Host transfers.
+
+**Results**:
+- File I/O pattern: 345 → 58 M words/s (-83% regression)
+- Vec collection: 290 → 41 M words/s (-86% regression)
+
+**Conclusion**: Write-combined memory is optimized for CPU→GPU writes, not GPU→Host transfers. Current PORTABLE-only pinned memory is already optimal.
+
+**Artifacts**:
+- `WRITE_COMBINED_MEMORY_EXPERIMENT.md` - Comprehensive analysis
+- `examples/benchmark_write_combined_*.rs` - Benchmark code for validation
+- Baseline and experimental JSON results
+
+**Recommendation**: Keep current implementation. Never use WRITECOMBINED flag for this use case.
+
+### Maintenance
+- Removed obsolete `RELEASE_NOTES_v*.md` files (content preserved in CHANGELOG)
+- Updated `docs/NEXT_SESSION_PROMPT.md` to reflect v1.5.0 completion and optimization phase status
+
 ## [1.5.0] - 2025-11-23
 
 ### Added - Dynamic Load Balancing for Heterogeneous GPUs

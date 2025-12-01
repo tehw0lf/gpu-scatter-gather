@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Benchmarking - Competitive Analysis Complete (2025-12-01)
+## [1.6.0] - 2025-12-01
+
+### Benchmarking - Competitive Analysis Complete
 **Status**: ✅ Complete - Validated against fastest CPU competitor
 
 Completed comprehensive competitive benchmarking against cracken (fastest CPU wordlist generator).
@@ -560,10 +562,13 @@ See v1.2.1 changelog for details and fix.
 | 1.1.0 | 2025-11-22 | Multi-GPU support with 90-95% scaling efficiency |
 | 1.2.0 | 2025-11-23 | ⚠️ DEPRECATED - Critical performance bug (4-5× regression) |
 | 1.2.1 | 2025-11-23 | Bug fix - Restored full performance for single-GPU systems |
-| **1.3.0** | **2025-11-23** | **Persistent worker threads + comprehensive documentation** |
+| 1.3.0 | 2025-11-23 | Persistent worker threads + comprehensive documentation |
+| 1.4.0 | 2025-11-24 | Pinned memory optimization (+65-75% performance) |
+| 1.5.0 | 2025-11-24 | Dynamic load balancing for heterogeneous GPUs |
+| **1.6.0** | **2025-12-01** | **Competitive benchmarking - 3.8-15.3× faster than cracken** |
 
 ---
 
-**Project Status:** Production Ready (v1.3.0 - Persistent workers + comprehensive docs, 48/48 tests passing)
+**Project Status:** Production Ready (v1.6.0 - Competitively validated: 3.8-15.3× faster than cracken, 48/48 tests passing)
 **Author:** tehw0lf + Claude Code (AI-assisted development)
 **License:** MIT OR Apache-2.0

@@ -20,3 +20,7 @@ NEXT_SESSION_PROMPT.md
 *.ncu-rep
 *.nsys-rep
 *.qdrep
+
+# John the Ripper session files
+*.log
+*.rec

@@ -3,6 +3,8 @@
 
 # Compiled test binaries
 test_ffi
+test_device_enumeration
+test_multigpu
 
 # Temporary session files (regenerate each session)
 READY_FOR_COMMIT.md

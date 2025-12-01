@@ -21,13 +21,15 @@ C Foreign Function Interface and language bindings:
 - **C_API_SPECIFICATION.md** - Complete C API reference
 - **FFI_IMPLEMENTATION_GUIDE.md** - Rust-to-C FFI implementation patterns
 - **CBINDGEN_SETUP.md** - Automatic C header generation setup
-- **PHASE1_SUMMARY.md** - Phase 1 implementation summary (host memory API)
 
 ### 🏗️ Design & Architecture (`design/`)
 System design and architectural decisions:
 - **FORMAL_SPECIFICATION.md** - Mathematical specification with proofs
 - **LIBRARY_ARCHITECTURE.md** - System design and component overview
+- **MULTI_GPU_DESIGN.md** - Multi-GPU architecture and load balancing
+- **PINNED_MEMORY_DESIGN.md** - Pinned memory optimization design
 - **PCIE_BOTTLENECK_ANALYSIS.md** - PCIe bandwidth bottleneck analysis
+- **MEMORY_COALESCING_DECISION.md** - Three-strikes decision on memory coalescing ⭐ NEW
 
 ### ✅ Validation & Testing (`validation/`)
 Correctness validation and quality assurance:
@@ -38,7 +40,10 @@ Correctness validation and quality assurance:
 ### 📊 Benchmarking (`benchmarking/`)
 Performance measurement and competitive analysis:
 - **BASELINE_BENCHMARKING_PLAN.md** - Scientific benchmarking methodology
+- **COMPETITIVE_RESULTS.md** - Complete competitive analysis vs cracken ⭐ NEW
 - **COMPETITOR_ANALYSIS.md** - Comparison with existing tools
+- **MULTI_GPU_RESULTS.md** - Multi-GPU scaling performance
+- **NSIGHT_COMPUTE_PROFILE_2025-11-22.md** - GPU profiling analysis
 
 ### 📖 User Guides (`guides/`)
 Integration and usage documentation:
@@ -58,14 +63,12 @@ Internal development documentation:
 
 ### 📦 Archive (`archive/`)
 Historical documents preserved for reference:
-- Phase-specific results and session summaries
+- Phase-specific results and session summaries (PHASE1-5_SUMMARY.md)
+- Failed optimization attempts (GPU_TRANSPOSE_ATTEMPT, WRITE_COMBINED_MEMORY_EXPERIMENT)
 - Temporary planning documents
 - Superseded analysis documents
 - Whitepaper support files (Mermaid diagrams, ASCII diagrams reference)
 - See `archive/README.md` for details
-
-### 🔄 Session Management
-- **NEXT_SESSION_PROMPT.md** (root) - Next session objectives (regenerated each session)
 
 ## Quick Navigation
 
@@ -119,9 +122,9 @@ Primary documents:
 
 ### Maintenance
 - Archive superseded documents to `archive/`
-- Update `NEXT_SESSION_PROMPT.md` after each session
 - Keep `DEVELOPMENT_LOG.md` updated with major milestones
 - Review and update `TODO.md` regularly
+- Document major decisions (e.g., MEMORY_COALESCING_DECISION.md)
 
 ## Size Summary
 
@@ -138,7 +141,15 @@ Primary documents:
 
 ## Recent Changes
 
-**2025-11-23**: User-Facing Documentation Expansion ⭐
+**2025-12-01**: v1.6.0 Release & Three-Strikes Decision ⭐
+- Released v1.6.0 with competitive benchmarking (3.8-15.3× faster than cracken)
+- Added **COMPETITIVE_RESULTS.md** - Complete competitive analysis
+- Added **MEMORY_COALESCING_DECISION.md** - Three-strikes optimization decision
+- Archived phase summaries and obsolete experiment docs
+- Removed NEXT_SESSION_PROMPT.md (no longer needed)
+- Documentation cleanup: 7 files archived
+
+**2025-11-23**: User-Facing Documentation Expansion
 - Added **[QUICKSTART.md](../QUICKSTART.md)** - 5-minute setup guide for new users
 - Added **[FAQ.md](../FAQ.md)** - Comprehensive FAQ with troubleshooting
 - Added **[EXAMPLES.md](../EXAMPLES.md)** - Complete guide to all 16 examples
@@ -152,12 +163,6 @@ Primary documents:
 - Created **RELEASE_NOTES_v1.0.0.md** - Comprehensive release notes
 - Updated all API phase summaries (PHASE1-5_SUMMARY.md)
 
-**2025-11-19**: Documentation reorganization
-- Created logical subdirectories (api/, design/, validation/, etc.)
-- Moved 11 historical documents to archive/
-- Created this README for better navigation
-- Reduced main documentation from ~450KB to ~250KB active docs
-
 ---
 
-*Last Updated: November 23, 2025*
+*Last Updated: December 1, 2025*

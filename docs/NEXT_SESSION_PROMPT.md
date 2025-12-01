@@ -134,8 +134,14 @@ ncu --set full --export profile.ncu-rep ./target/release/examples/benchmark_real
 - `docs/development/TODO.md` - Outstanding tasks
 
 ### Benchmarking
+- `docs/benchmarking/COMPETITIVE_RESULTS.md` - **NEW:** Complete competitive analysis vs cracken
+- `docs/benchmarking/COMPETITOR_ANALYSIS.md` - Updated with actual benchmark results
 - `docs/benchmarking/BASELINE_BENCHMARKING_PLAN.md` - Performance methodology
-- `examples/benchmark_realistic.rs` - Primary performance benchmark (now includes 16-char)
+- `examples/benchmark_realistic.rs` - Primary performance benchmark
+- `examples/benchmark_pure_generation.rs` - **NEW:** Zero-copy generation benchmark
+- `examples/benchmark_cracken_comparison.rs` - **NEW:** Fair comparison vs cracken
+- `examples/benchmark_stdout.rs` - **NEW:** stdout piping performance
+- `examples/benchmark_john_pipe.rs` - **NEW:** John the Ripper integration
 - `examples/benchmark_write_combined_*.rs` - Experimental benchmarks (rejected)
 
 ### Key Implementation Files
@@ -151,11 +157,11 @@ ncu --set full --export profile.ncu-rep ./target/release/examples/benchmark_real
 # Latest commits
 git log --oneline -5
 
+287134e feat(benchmark): Complete competitive analysis vs cracken
+b64102a docs: Update NEXT_SESSION_PROMPT - project is feature-complete
 22e0f06 feat(perf): Implement persistent GPU buffers for output reuse
 c06fc68 feat(benchmark): Add 16-char password baseline validation
 e769f69 docs: Update NEXT_SESSION_PROMPT for baseline validation focus
-4a359e5 test(experiment): Add 16-char password testing - regression worsens with length
-84dc164 fix(experiment): Re-test write-combined memory with realistic 12-char passwords
 
 # Tags
 git tag -l
@@ -177,6 +183,7 @@ v1.5.0  # ← Latest release
 2. **v1.5.0**: Dynamic load balancing for heterogeneous GPUs (5-10%)
 3. **Write-Combined Memory Experiment**: Rejected (-83% to -91% regression)
 4. **Persistent GPU Buffers**: Marginal (< 1%, retained for cleaner code)
+5. **Competitive Benchmarking**: Complete (3.8-15.3× faster than cracken)
 
 ### Key Findings
 - **Main bottleneck**: Uncoalesced GPU memory writes (7.69% efficiency, 13× L1 amplification)
@@ -187,41 +194,34 @@ v1.5.0  # ← Latest release
 
 ## What's Next?
 
-### Immediate Priority (This Session)
-**COMPLETE COMPETITIVE BENCHMARKING** - See priority section above ⬆️
+### Current State: ✅ Production-Ready
+The project is **feature-complete and competitively validated**:
+- ✅ Feature-complete implementation
+- ✅ Performance optimizations done
+- ✅ Competitive benchmarking complete (3.8-15.3× faster than cracken)
+- ✅ All benchmark files committed and documented
 
-This is the **main blocker** before the project can be considered truly production-ready:
-1. Run the competitive benchmarks (already written, just needs execution)
-2. Document actual results vs cracken and other tools
-3. Validate or adjust performance claims
-4. Commit all benchmark code and results
-
-**Estimated Time**: 1-2 hours
-**Importance**: HIGH - Academic rigor requires validated claims
-
-### After Competitive Benchmarking Complete
+### Possible Next Steps (All Optional)
 
 #### If This Were a Real Project with Users
 - Monitor GitHub issues for feature requests
-- ✅ ~~Benchmark against competing tools~~ (COMPLETED)
 - Write integration guides for hashcat/John the Ripper
 - Publish ArXiv paper on algorithm
+- Create release v1.6.0 with competitive benchmarking
 
 #### Optional Research: Memory Coalescing (High Risk/Reward)
 - Only if you want to explore theoretical 2-3× improvements
 - See "Optional Research" section above for details
+- Requires weeks of effort with uncertain payoff
 
-### Current State
-The project is **technically complete** but **competitively unvalidated**:
-- ✅ Feature-complete implementation
-- ✅ Performance optimizations done
-- ⚠️ **Competitive claims unverified** ← **MUST FIX**
-- ❌ Benchmark files uncommitted
+#### Otherwise
+- **Wait for user adoption/feedback** - No further work needed unless users request features
 
 ---
 
 *Last Updated: December 1, 2025*
-*Version: 19.0 (v1.5.0 + Competitive Benchmarking Pending)*
+*Version: 20.0 (v1.5.0 + Competitive Benchmarking Complete)*
 *Current Branch: main*
-*Status: Feature-complete, competitive benchmarking incomplete*
-*Next: **RUN COMPETITIVE BENCHMARKS AND COMMIT RESULTS***
+*Current Commit: 287134e*
+*Status: ✅ Feature-complete and competitively validated*
+*Next: Optional research or wait for user feedback*

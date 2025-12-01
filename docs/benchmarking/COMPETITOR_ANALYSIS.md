@@ -245,7 +245,7 @@ gpu-scatter-gather: 635M-1.2B words/s
 ### Phase 1: CPU Competitor Validation ✅ COMPLETE
 - [x] maskprocessor (DONE - 100% output match, 142M/s)
 - [x] hashcat --stdout (DONE - set-wise match, ~100-150M/s)
-- [ ] cracken (TODO - fastest CPU competitor, need to benchmark)
+- [x] cracken (DONE - 3.8-15.3× speedup, see COMPETITIVE_RESULTS.md)
 
 ### Phase 2: Real-World Pipeline Benchmarking (Future)
 - [ ] **End-to-end comparison:** Our generation + hashcat hashing vs hashcat integrated

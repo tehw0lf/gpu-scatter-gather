@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Benchmarking - Competitive Analysis Complete (2025-12-01)
+**Status**: ✅ Complete - Validated against fastest CPU competitor
+
+Completed comprehensive competitive benchmarking against cracken (fastest CPU wordlist generator).
+
+**Key Results**:
+- **8-char passwords**: 3.8× faster (765 M/s vs 201 M/s)
+- **16-char passwords**: 15.3× faster (655 M/s vs 43 M/s)
+- Performance advantage increases with password length
+
+**Benchmarks Added**:
+- `examples/benchmark_cracken_comparison.rs` - Fair 16-char comparison
+- `examples/benchmark_pure_generation.rs` - Zero-copy generation (no I/O)
+- `examples/benchmark_stdout.rs` - stdout piping performance
+- `examples/benchmark_john_pipe.rs` - John the Ripper integration
+
+**Documentation**:
+- `docs/benchmarking/COMPETITIVE_RESULTS.md` - Complete analysis with methodology
+- Updated `docs/benchmarking/COMPETITOR_ANALYSIS.md` - Marked Phase 1 complete
+
+**Conclusion**: GPU scatter-gather is **3.8-15.3× faster** than the fastest CPU competitor, with speedup increasing for longer passwords. All Phase 1 competitive validation complete.
+
+---
+
 ### Performance - Persistent GPU Buffers (2025-11-24)
 **Status**: ✅ Implemented - Marginal improvement (~0.5% or less)
 

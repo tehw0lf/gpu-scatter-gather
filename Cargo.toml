@@ -1,6 +1,6 @@
 [package]
 name = "gpu-scatter-gather"
-version = "1.5.0"
+version = "1.7.0"
 edition = "2021"
 authors = ["tehw0lf"]
 license = "MIT OR Apache-2.0"
@@ -9,6 +9,15 @@ repository = "https://github.com/tehw0lf/gpu-scatter-gather"
 readme = "README.md"
 keywords = ["wordlist", "gpu", "cuda", "password", "security"]
 categories = ["command-line-utilities", "algorithms"]
+exclude = [
+    "results/*",
+    "profiling/*",
+    "*.ncu-rep",
+    "test_*",
+    ".claude/*",
+    "tools/*",
+    ".github/*",
+]
 
 [lib]
 name = "gpu_scatter_gather"

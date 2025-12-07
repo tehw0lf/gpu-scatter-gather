@@ -122,7 +122,8 @@ enum WorkerMessage {
 struct PinnedBuffer {
     /// Raw pointer to pinned memory
     ptr: *mut u8,
-    /// Size of the buffer in bytes
+    /// Size of the buffer in bytes (kept for debugging/future use)
+    #[allow(dead_code)]
     size: usize,
 }
 
@@ -172,6 +173,7 @@ impl PinnedBuffer {
 
     /// Get the size of the buffer
     #[inline]
+    #[allow(dead_code)]
     fn size(&self) -> usize {
         self.size
     }
@@ -183,6 +185,7 @@ impl PinnedBuffer {
     /// - `len` does not exceed buffer size
     /// - No concurrent mutable access to the same region
     #[inline]
+    #[allow(dead_code)]
     unsafe fn as_slice(&self, len: usize) -> &[u8] {
         std::slice::from_raw_parts(self.ptr, len)
     }
@@ -361,7 +364,8 @@ pub struct MultiGpuContext {
     worker_threads: Option<Vec<(Sender<WorkerMessage>, JoinHandle<()>)>>,
     /// Pinned memory buffers (one per worker) for fast PCIe transfers
     pinned_buffers: Vec<PinnedBuffer>,
-    /// Maximum buffer size per worker (in bytes)
+    /// Maximum buffer size per worker (in bytes) - kept for future use
+    #[allow(dead_code)]
     max_buffer_size: usize,
     /// Performance statistics per GPU for adaptive load balancing
     gpu_stats: Vec<GpuStats>,
@@ -1283,7 +1287,7 @@ mod tests {
         // We can test this even without actual GPUs by creating a mock
         // For now, test the standalone partition_keyspace function
         match MultiGpuContext::with_devices(&[0]) {
-            Ok(mut ctx) => {
+            Ok(ctx) => {
                 // Test partitioning with offset
                 let partitions = ctx.partition(1000, 100);
                 assert_eq!(partitions.len(), 1);
@@ -1301,7 +1305,7 @@ mod tests {
     fn test_multi_gpu_with_single_device() {
         // Test with device 0 only
         match MultiGpuContext::with_devices(&[0]) {
-            Ok(mut ctx) => {
+            Ok(ctx) => {
                 assert_eq!(ctx.num_devices(), 1);
                 assert_eq!(ctx.worker(0).unwrap().device_id(), 0);
             }

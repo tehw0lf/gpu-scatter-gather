@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2025-12-07
+
+### Publishing - Crates.io Preparation
+**Status**: ✅ Ready for publication
+
+Prepared project for publishing to crates.io as a Rust library crate.
+
+**Licensing**:
+- Added `LICENSE-MIT` and `LICENSE-APACHE` files (dual licensing standard for Rust ecosystem)
+- Dual license allows users to choose MIT (simple/permissive) or Apache-2.0 (patent protection)
+- Follows Rust ecosystem conventions (same as Rust itself)
+
+**Code Quality**:
+- Fixed all `dead_code` compiler warnings with `#[allow(dead_code)]` annotations:
+  - `WordlistGenerator::batch_size` - Reserved for future use
+  - `PinnedBuffer::size` field and helper methods - Kept for debugging
+  - `MultiGpuContext::max_buffer_size` - Planned for future load balancing
+  - `GeneratorInternal::owns_context` - Context ownership tracking
+- Removed unnecessary `mut` qualifiers in test functions
+- Library now compiles without warnings (except build-time CUDA sm_70 architecture warning)
+
+**Package Optimization**:
+- Added exclude list to `Cargo.toml` for reduced package size:
+  - Excludes development artifacts: `results/*`, `profiling/*`, `*.ncu-rep`
+  - Excludes test binaries: `test_*`
+  - Excludes internal tools: `.claude/*`, `tools/*`, `.github/*`
+  - Final package: ~1.7MB (661KB compressed)
+
+**Testing**:
+- All 55 unit/integration tests passing
+- Build system validated with `cargo package --dry-run`
+- Ready for `cargo publish` when crates.io token is configured
+
+**Next Steps** (not in this release):
+- Publish to crates.io via GitHub Actions workflow (when implemented in workflows/ repo)
+- Add crates.io badge to README
+- Monitor community feedback and usage
+
+---
+
 ## [1.6.0] - 2025-12-01
 
 ### Benchmarking - Competitive Analysis Complete

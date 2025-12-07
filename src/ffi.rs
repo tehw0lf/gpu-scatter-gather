@@ -64,7 +64,8 @@ struct GeneratorInternal {
     charsets: HashMap<usize, Vec<u8>>,
     mask: Option<Vec<usize>>,
     current_batch: Option<CUdeviceptr>,  // Track active device memory
-    owns_context: bool,  // Whether we created the CUDA context
+    #[allow(dead_code)]
+    owns_context: bool,  // Whether we created the CUDA context (kept for future use)
     output_format: i32,  // Output format mode (WG_FORMAT_*)
 }
 

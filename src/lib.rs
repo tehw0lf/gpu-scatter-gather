@@ -122,6 +122,7 @@ impl Default for WordlistGeneratorBuilder {
 pub struct WordlistGenerator {
     charsets: HashMap<usize, Charset>,
     mask: Vec<usize>,
+    #[allow(dead_code)]
     batch_size: usize,
 }
 

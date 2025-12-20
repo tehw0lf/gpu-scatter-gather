@@ -1,0 +1,37 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build_and_publish:
+    uses: tehw0lf/workflows/.github/workflows/build-test-publish.yml@main
+    permissions:
+      id-token: write       # Required for OIDC Trusted Publishing to crates.io
+      actions: write        # Required for workflow management
+      contents: write       # Required for GitHub releases
+      packages: write       # Required for publishing
+      security-events: write # Required for SARIF uploads
+    with:
+      tool: cargo
+      artifact_path: target/release/gpu-scatter-gather
+      event_name: ${{ github.event_name }}
+
+      # Rust configuration
+      rust_version: stable
+      enable_rustfmt: true
+      enable_clippy: true
+      clippy_args: "-- -D warnings"
+
+      # Security scanning
+      enable_security_scanning: "true"
+      semgrep_rules: "auto"
+      trivy_severity: "MEDIUM,HIGH,CRITICAL"
+      trivy_exit_code: "1"
+
+      # GitHub release configuration
+      publish_github_release: ${{ startsWith(github.ref, 'refs/tags/v') && 'true' || 'false' }}
+      release_tag: ${{ github.ref_name }}

@@ -12,6 +12,7 @@ jobs:
     permissions:
       id-token: write       # Required for OIDC Trusted Publishing to crates.io
       actions: write        # Required for workflow management
+      attestations: write   # Required for artifact attestation
       contents: write       # Required for GitHub releases
       packages: write       # Required for publishing
       security-events: write # Required for SARIF uploads

@@ -183,9 +183,9 @@ mod tests {
             assert_eq!(word[word_length - 1], b'\n');
 
             // Reconstruct expected word
-            for char_idx in 0..(word_length - 1) {
+            for (char_idx, &actual_char) in word.iter().enumerate().take(word_length - 1) {
                 let expected_char = b'a' + ((word_idx * 4 + char_idx) % 26) as u8;
-                assert_eq!(word[char_idx], expected_char);
+                assert_eq!(actual_char, expected_char);
             }
         }
     }

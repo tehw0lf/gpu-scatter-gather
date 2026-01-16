@@ -576,6 +576,7 @@ impl GpuContext {
     }
 
     /// Internal implementation for word generation
+    #[allow(clippy::too_many_arguments)]
     fn generate_batch_internal(
         &mut self,
         charsets: &HashMap<usize, Vec<u8>>,

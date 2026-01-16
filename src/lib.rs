@@ -162,7 +162,7 @@ impl WordlistGenerator {
     }
 
     /// Create an iterator over all words (CPU reference implementation)
-    pub fn iter(&self) -> WordlistIterator {
+    pub fn iter(&self) -> WordlistIterator<'_> {
         WordlistIterator {
             generator: self,
             current_index: 0,

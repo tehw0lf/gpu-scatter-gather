@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-01-16
+
+### Code Quality Improvements
+
+**Fixed**:
+- Resolved all compilation errors and warnings (unused imports, borrow checker issues)
+- Fixed 60+ clippy warnings about format string usage (modernized to inline format)
+- Applied automatic code formatting via `cargo fmt`
+- All 76 tests passing with zero compilation errors
+
+**Changed**:
+- Modernized format strings to use inline variables (`format!("{variable}")` instead of `format!("{}", variable)`)
+- Improved code consistency across all source files
+
+**Impact**:
+- Cleaner codebase with improved maintainability
+- No functional changes or performance impact
+- Drop-in replacement for v1.7.0
+
+---
+
 ## [1.7.0] - 2025-12-07
 
 ### Publishing - Crates.io Preparation

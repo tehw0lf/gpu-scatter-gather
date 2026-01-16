@@ -55,14 +55,17 @@ fn main() -> Result<()> {
             device,
         ))?;
 
-        println!("GPU: {}", name_str);
-        println!("Compute Capability: {}.{}", compute_capability_major, compute_capability_minor);
-        println!("Multiprocessors: {}", multiprocessor_count);
+        println!("GPU: {name_str}");
+        println!(
+            "Compute Capability: {compute_capability_major}.{compute_capability_minor}"
+        );
+        println!("Multiprocessors: {multiprocessor_count}");
         println!();
 
         // Create context
         let mut context = ptr::null_mut();
-        check_cuda(cuCtxCreate_v2(&mut context, 0, device)).context("Failed to create CUDA context")?;
+        check_cuda(cuCtxCreate_v2(&mut context, 0, device))
+            .context("Failed to create CUDA context")?;
 
         // Load PTX module
         let ptx_path = format!(
@@ -72,21 +75,28 @@ fn main() -> Result<()> {
             compute_capability_minor
         );
 
-        println!("Loading kernel from: {}", ptx_path);
+        println!("Loading kernel from: {ptx_path}");
 
         let ptx_data = std::fs::read(&ptx_path)
-            .with_context(|| format!("Failed to read PTX file: {}", ptx_path))?;
+            .with_context(|| format!("Failed to read PTX file: {ptx_path}"))?;
         let ptx_cstring = CString::new(ptx_data)?;
 
         let mut module = ptr::null_mut();
-        check_cuda(cuModuleLoadData(&mut module, ptx_cstring.as_ptr() as *const _))
-            .context("Failed to load CUDA module")?;
+        check_cuda(cuModuleLoadData(
+            &mut module,
+            ptx_cstring.as_ptr() as *const _,
+        ))
+        .context("Failed to load CUDA module")?;
 
         // Get kernel function
         let kernel_name = CString::new("poc_generate_words_compute_only")?;
         let mut kernel = ptr::null_mut();
-        check_cuda(cuModuleGetFunction(&mut kernel, module, kernel_name.as_ptr()))
-            .context("Failed to get kernel function")?;
+        check_cuda(cuModuleGetFunction(
+            &mut kernel,
+            module,
+            kernel_name.as_ptr(),
+        ))
+        .context("Failed to get kernel function")?;
 
         println!("✅ Kernel loaded successfully!");
         println!();
@@ -99,9 +109,9 @@ fn main() -> Result<()> {
         charset_data.extend_from_slice(charset1);
         charset_data.extend_from_slice(charset2);
 
-        let charset_offsets = [0i32, 3];  // ?1 starts at 0, ?2 starts at 3
-        let charset_sizes = [3i32, 3];     // Both have 3 characters
-        let mask_pattern = [0i32, 1];      // Position 0 uses charset 0, position 1 uses charset 1
+        let charset_offsets = [0i32, 3]; // ?1 starts at 0, ?2 starts at 3
+        let charset_sizes = [3i32, 3]; // Both have 3 characters
+        let mask_pattern = [0i32, 1]; // Position 0 uses charset 0, position 1 uses charset 1
         let word_length = 2i32;
 
         // Allocate GPU memory
@@ -112,25 +122,50 @@ fn main() -> Result<()> {
         let mut d_checksum = 0u64;
 
         check_cuda(cuMemAlloc_v2(&mut d_charset_data, charset_data.len()))?;
-        check_cuda(cuMemAlloc_v2(&mut d_charset_offsets, 2 * std::mem::size_of::<i32>()))?;
-        check_cuda(cuMemAlloc_v2(&mut d_charset_sizes, 2 * std::mem::size_of::<i32>()))?;
-        check_cuda(cuMemAlloc_v2(&mut d_mask_pattern, 2 * std::mem::size_of::<i32>()))?;
+        check_cuda(cuMemAlloc_v2(
+            &mut d_charset_offsets,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
+        check_cuda(cuMemAlloc_v2(
+            &mut d_charset_sizes,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
+        check_cuda(cuMemAlloc_v2(
+            &mut d_mask_pattern,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
         check_cuda(cuMemAlloc_v2(&mut d_checksum, std::mem::size_of::<u64>()))?;
 
         // Copy data to GPU
-        check_cuda(cuMemcpyHtoD_v2(d_charset_data, charset_data.as_ptr() as *const _, charset_data.len()))?;
-        check_cuda(cuMemcpyHtoD_v2(d_charset_offsets, charset_offsets.as_ptr() as *const _, 2 * std::mem::size_of::<i32>()))?;
-        check_cuda(cuMemcpyHtoD_v2(d_charset_sizes, charset_sizes.as_ptr() as *const _, 2 * std::mem::size_of::<i32>()))?;
-        check_cuda(cuMemcpyHtoD_v2(d_mask_pattern, mask_pattern.as_ptr() as *const _, 2 * std::mem::size_of::<i32>()))?;
+        check_cuda(cuMemcpyHtoD_v2(
+            d_charset_data,
+            charset_data.as_ptr() as *const _,
+            charset_data.len(),
+        ))?;
+        check_cuda(cuMemcpyHtoD_v2(
+            d_charset_offsets,
+            charset_offsets.as_ptr() as *const _,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
+        check_cuda(cuMemcpyHtoD_v2(
+            d_charset_sizes,
+            charset_sizes.as_ptr() as *const _,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
+        check_cuda(cuMemcpyHtoD_v2(
+            d_mask_pattern,
+            mask_pattern.as_ptr() as *const _,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
 
         // Kernel launch configuration
         let block_size: u32 = 256;
-        let grid_size: u32 = ((BATCH_SIZE + block_size as u64 - 1) / block_size as u64) as u32;
+        let grid_size: u32 = BATCH_SIZE.div_ceil(block_size as u64) as u32;
 
         println!("Launching kernel:");
-        println!("  Batch size: {} words", BATCH_SIZE);
-        println!("  Block size: {} threads", block_size);
-        println!("  Grid size: {} blocks", grid_size);
+        println!("  Batch size: {BATCH_SIZE} words");
+        println!("  Block size: {block_size} threads");
+        println!("  Grid size: {grid_size} blocks");
         println!("  Total threads: {}", grid_size as u64 * block_size as u64);
         println!();
 
@@ -169,7 +204,7 @@ fn main() -> Result<()> {
 
         // THE BIG TEST!
         println!("🚀 RUNNING POC BENCHMARK...");
-        println!("   Generating {} words...", BATCH_SIZE);
+        println!("   Generating {BATCH_SIZE} words...");
         println!();
 
         let start_time = std::time::Instant::now();
@@ -198,17 +233,29 @@ fn main() -> Result<()> {
         println!("🎉 RESULTS:");
         println!("{}", "=".repeat(70));
         println!();
-        println!("  Generated {} words in {:.4} seconds", BATCH_SIZE, elapsed_secs);
+        println!(
+            "  Generated {BATCH_SIZE} words in {elapsed_secs:.4} seconds"
+        );
         println!();
-        println!("  ⚡ THROUGHPUT: {:.2} BILLION words/second", words_per_second / 1e9);
+        println!(
+            "  ⚡ THROUGHPUT: {:.2} BILLION words/second",
+            words_per_second / 1e9
+        );
         println!();
-        println!("  Speedup vs maskprocessor (142M/s): {:.2}x", words_per_second / 142_000_000.0);
+        println!(
+            "  Speedup vs maskprocessor (142M/s): {:.2}x",
+            words_per_second / 142_000_000.0
+        );
         println!();
 
         // Theoretical maximum
-        let theoretical_max = 2.19e9;  // 2.19 billion for RTX 4070 Ti SUPER
+        let theoretical_max = 2.19e9; // 2.19 billion for RTX 4070 Ti SUPER
         let efficiency = (words_per_second / theoretical_max) * 100.0;
-        println!("  Efficiency: {:.1}% of theoretical maximum ({:.2}B words/s)", efficiency, theoretical_max / 1e9);
+        println!(
+            "  Efficiency: {:.1}% of theoretical maximum ({:.2}B words/s)",
+            efficiency,
+            theoretical_max / 1e9
+        );
         println!();
 
         if words_per_second > 1e9 {
@@ -246,9 +293,9 @@ unsafe fn check_cuda(result: CUresult) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         } else {
-            format!("CUDA error code: {:?}", result)
+            format!("CUDA error code: {result:?}")
         };
-        anyhow::bail!("CUDA error: {}", error_msg);
+        anyhow::bail!("CUDA error: {error_msg}");
     }
     Ok(())
 }

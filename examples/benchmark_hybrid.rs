@@ -34,7 +34,7 @@ fn main() -> Result<()> {
 
     // Warmup
     println!("Warming up GPU...");
-    let _ = gpu.generate_batch(&charsets, &mask, 0, 1_000_000, 0)?;  // format=0 (newlines)
+    let _ = gpu.generate_batch(&charsets, &mask, 0, 1_000_000, 0)?; // format=0 (newlines)
     println!("Warmup complete.\n");
 
     println!("{}", "=".repeat(80));
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
     println!("Expected coalescing: 7.69% (baseline)\n");
 
     let start = Instant::now();
-    let output_original = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
+    let output_original = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?; // format=0 (newlines)
     let duration_original = start.elapsed();
 
     let throughput_original = batch_size as f64 / duration_original.as_secs_f64();
@@ -53,7 +53,7 @@ fn main() -> Result<()> {
     println!("Results:");
     println!("  Time: {:.2} ms", duration_original.as_secs_f64() * 1000.0);
     println!("  Throughput: {:.2} M words/s", throughput_original / 1e6);
-    println!("  Memory bandwidth: {:.2} GB/s", bandwidth_original);
+    println!("  Memory bandwidth: {bandwidth_original:.2} GB/s");
     println!();
 
     // Verify sample output
@@ -71,16 +71,19 @@ fn main() -> Result<()> {
     println!("Expected coalescing: 7.69% (same as baseline - writes still uncoalesced)\n");
 
     let start = Instant::now();
-    let output_transposed = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
+    let output_transposed = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size, 0)?; // format=0 (newlines)
     let duration_transposed = start.elapsed();
 
     let throughput_transposed = batch_size as f64 / duration_transposed.as_secs_f64();
     let bandwidth_transposed = (batch_size * 13) as f64 / duration_transposed.as_secs_f64() / 1e9;
 
     println!("Results:");
-    println!("  Time: {:.2} ms", duration_transposed.as_secs_f64() * 1000.0);
+    println!(
+        "  Time: {:.2} ms",
+        duration_transposed.as_secs_f64() * 1000.0
+    );
     println!("  Throughput: {:.2} M words/s", throughput_transposed / 1e6);
-    println!("  Memory bandwidth: {:.2} GB/s", bandwidth_transposed);
+    println!("  Memory bandwidth: {bandwidth_transposed:.2} GB/s");
     println!();
 
     // Verify correctness
@@ -99,7 +102,7 @@ fn main() -> Result<()> {
     println!("CPU transpose: AVX2 SIMD\n");
 
     let start = Instant::now();
-    let output_hybrid = gpu.generate_batch_hybrid(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
+    let output_hybrid = gpu.generate_batch_hybrid(&charsets, &mask, 0, batch_size, 0)?; // format=0 (newlines)
     let duration_hybrid = start.elapsed();
 
     let throughput_hybrid = batch_size as f64 / duration_hybrid.as_secs_f64();
@@ -108,7 +111,7 @@ fn main() -> Result<()> {
     println!("Results:");
     println!("  Time: {:.2} ms", duration_hybrid.as_secs_f64() * 1000.0);
     println!("  Throughput: {:.2} M words/s", throughput_hybrid / 1e6);
-    println!("  Memory bandwidth: {:.2} GB/s", bandwidth_hybrid);
+    println!("  Memory bandwidth: {bandwidth_hybrid:.2} GB/s");
     println!();
 
     // Verify correctness
@@ -120,9 +123,15 @@ fn main() -> Result<()> {
         // Debug: show first mismatch
         for i in 0..output_hybrid.len().min(output_original.len()) {
             if output_hybrid[i] != output_original[i] {
-                println!("  First mismatch at byte {}", i);
-                println!("  Expected: {:?}", &output_original[i.saturating_sub(10)..i+10]);
-                println!("  Got:      {:?}", &output_hybrid[i.saturating_sub(10)..i+10]);
+                println!("  First mismatch at byte {i}");
+                println!(
+                    "  Expected: {:?}",
+                    &output_original[i.saturating_sub(10)..i + 10]
+                );
+                println!(
+                    "  Got:      {:?}",
+                    &output_hybrid[i.saturating_sub(10)..i + 10]
+                );
                 break;
             }
         }
@@ -134,8 +143,12 @@ fn main() -> Result<()> {
     println!("{}", "=".repeat(80));
     println!();
 
-    println!("│ Kernel          │ Throughput (M/s) │ Bandwidth (GB/s) │ vs Original │ vs Transposed │");
-    println!("├─────────────────┼──────────────────┼──────────────────┼─────────────┼───────────────┤");
+    println!(
+        "│ Kernel          │ Throughput (M/s) │ Bandwidth (GB/s) │ vs Original │ vs Transposed │"
+    );
+    println!(
+        "├─────────────────┼──────────────────┼──────────────────┼─────────────┼───────────────┤"
+    );
     println!(
         "│ Original        │ {:>16.2} │ {:>16.2} │      1.00x  │        1.00x  │",
         throughput_original / 1e6,
@@ -165,16 +178,21 @@ fn main() -> Result<()> {
     let speedup = throughput_hybrid / throughput_original;
     let target_speedup = 1.5;
 
-    println!("Target: {:>5.1}x speedup vs original", target_speedup);
-    println!("Actual: {:>5.2}x speedup", speedup);
+    println!("Target: {target_speedup:>5.1}x speedup vs original");
+    println!("Actual: {speedup:>5.2}x speedup");
 
     if speedup >= target_speedup {
         println!("✓ SUCCESS: Hybrid approach achieves target performance!");
         println!();
         println!("Estimated coalescing improvement:");
-        println!("  Memory bandwidth increased by {:.2}x", bandwidth_hybrid / bandwidth_original);
-        println!("  This suggests coalescing efficiency improved from 7.69% to ~{:.1}%",
-            7.69 * (bandwidth_hybrid / bandwidth_original));
+        println!(
+            "  Memory bandwidth increased by {:.2}x",
+            bandwidth_hybrid / bandwidth_original
+        );
+        println!(
+            "  This suggests coalescing efficiency improved from 7.69% to ~{:.1}%",
+            7.69 * (bandwidth_hybrid / bandwidth_original)
+        );
     } else {
         println!("✗ MISS: Hybrid approach did not achieve target speedup");
         println!();
@@ -196,13 +214,20 @@ fn main() -> Result<()> {
     let estimated_transpose_time = duration_hybrid.as_secs_f64() - estimated_gpu_time;
     let transpose_overhead_pct = (estimated_transpose_time / duration_hybrid.as_secs_f64()) * 100.0;
 
-    println!("Total time:      {:.2} ms", duration_hybrid.as_secs_f64() * 1000.0);
-    println!("Estimated GPU:   {:.2} ms ({:.1}%)",
+    println!(
+        "Total time:      {:.2} ms",
+        duration_hybrid.as_secs_f64() * 1000.0
+    );
+    println!(
+        "Estimated GPU:   {:.2} ms ({:.1}%)",
         estimated_gpu_time * 1000.0,
-        (estimated_gpu_time / duration_hybrid.as_secs_f64()) * 100.0);
-    println!("Estimated CPU:   {:.2} ms ({:.1}%)",
+        (estimated_gpu_time / duration_hybrid.as_secs_f64()) * 100.0
+    );
+    println!(
+        "Estimated CPU:   {:.2} ms ({:.1}%)",
         estimated_transpose_time * 1000.0,
-        transpose_overhead_pct);
+        transpose_overhead_pct
+    );
     println!();
 
     if transpose_overhead_pct < 20.0 {

@@ -21,8 +21,8 @@ fn main() -> Result<()> {
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
 
-    println!("GPU: {}", device_name);
-    println!("Compute Capability: {}.{}", major, minor);
+    println!("GPU: {device_name}");
+    println!("Compute Capability: {major}.{minor}");
     println!();
 
     // Charsets
@@ -31,7 +31,7 @@ fn main() -> Result<()> {
 
     let mut charsets = std::collections::HashMap::new();
     charsets.insert(0, lowercase.as_bytes().to_vec()); // ?l
-    charsets.insert(1, digits.as_bytes().to_vec());     // ?d
+    charsets.insert(1, digits.as_bytes().to_vec()); // ?d
 
     // Test 12-char passwords (most interesting case from analysis)
     let word_length = 12;
@@ -46,16 +46,19 @@ fn main() -> Result<()> {
         mask.push(1); // digit
     }
 
-    println!("📊 Testing 12-character passwords: {}", pattern);
+    println!("📊 Testing 12-character passwords: {pattern}");
     println!("   Lowercase: 8, Digits: 4");
-    println!("   Total keyspace: {} combinations ({:.2e})", keyspace, keyspace as f64);
+    println!(
+        "   Total keyspace: {} combinations ({:.2e})",
+        keyspace, keyspace as f64
+    );
     println!();
 
     // Test batch sizes
     let batch_sizes = vec![
-        10_000_000u64,   // 10M
-        50_000_000,      // 50M
-        100_000_000,     // 100M
+        10_000_000u64, // 10M
+        50_000_000,    // 50M
+        100_000_000,   // 100M
     ];
 
     println!("{}", "=".repeat(80));
@@ -71,11 +74,11 @@ fn main() -> Result<()> {
 
         for &batch_size in &batch_sizes {
             // Warmup
-            let _ = gpu.generate_batch(&charsets, &mask, 0, 1000, 0)?;  // format=0 (newlines)
+            let _ = gpu.generate_batch(&charsets, &mask, 0, 1000, 0)?; // format=0 (newlines)
 
             // Measure
             check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
-            let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
+            let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?; // format=0 (newlines)
             check_cuda(cuEventRecord(end_event, ptr::null_mut()))?;
             check_cuda(cuEventSynchronize(end_event))?;
 
@@ -84,7 +87,8 @@ fn main() -> Result<()> {
 
             let elapsed_secs = elapsed_ms / 1000.0;
             let words_per_second = batch_size as f64 / elapsed_secs as f64;
-            let mb_per_second = (batch_size as f64 * (word_length + 1) as f64) / elapsed_secs as f64 / 1e6;
+            let mb_per_second =
+                (batch_size as f64 * (word_length + 1) as f64) / elapsed_secs as f64 / 1e6;
 
             println!(
                 "   Batch: {:>12} words | Time: {:>7.4} s | {:>7.2} M words/s | {:>8.2} MB/s",
@@ -113,11 +117,11 @@ fn main() -> Result<()> {
 
         for &batch_size in &batch_sizes {
             // Warmup
-            let _ = gpu.generate_batch_transposed(&charsets, &mask, 0, 1000, 0)?;  // format=0 (newlines)
+            let _ = gpu.generate_batch_transposed(&charsets, &mask, 0, 1000, 0)?; // format=0 (newlines)
 
             // Measure
             check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
-            let _output = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
+            let _output = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size, 0)?; // format=0 (newlines)
             check_cuda(cuEventRecord(end_event, ptr::null_mut()))?;
             check_cuda(cuEventSynchronize(end_event))?;
 
@@ -126,7 +130,8 @@ fn main() -> Result<()> {
 
             let elapsed_secs = elapsed_ms / 1000.0;
             let words_per_second = batch_size as f64 / elapsed_secs as f64;
-            let mb_per_second = (batch_size as f64 * (word_length + 1) as f64) / elapsed_secs as f64 / 1e6;
+            let mb_per_second =
+                (batch_size as f64 * (word_length + 1) as f64) / elapsed_secs as f64 / 1e6;
 
             println!(
                 "   Batch: {:>12} words | Time: {:>7.4} s | {:>7.2} M words/s | {:>8.2} MB/s",
@@ -170,9 +175,9 @@ unsafe fn check_cuda(result: CUresult) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         } else {
-            format!("CUDA error code: {:?}", result)
+            format!("CUDA error code: {result:?}")
         };
-        anyhow::bail!("CUDA error: {}", error_msg);
+        anyhow::bail!("CUDA error: {error_msg}");
     }
     Ok(())
 }

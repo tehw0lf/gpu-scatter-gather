@@ -3,32 +3,35 @@
 //! These tests ensure our GPU implementation produces identical output
 //! to industry-standard tools like maskprocessor and hashcat.
 
+use gpu_scatter_gather::WordlistGenerator;
 use std::collections::HashMap;
 use std::process::Command;
-use gpu_scatter_gather::WordlistGenerator;
 
 /// Helper function to run maskprocessor with given charsets and mask
 fn run_maskprocessor(mask: &str, charsets: &HashMap<usize, &str>) -> Result<Vec<u8>, String> {
     // Find the project root (where Cargo.toml is)
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let mp_path = format!("{}/tools/maskprocessor/src/mp64.bin", manifest_dir);
+    let mp_path = format!("{manifest_dir}/tools/maskprocessor/src/mp64.bin");
 
     let mut cmd = Command::new(&mp_path);
 
     // Add charset arguments
     for (id, charset) in charsets.iter() {
-        cmd.arg(format!("-{}", id)).arg(charset);
+        cmd.arg(format!("-{id}")).arg(charset);
     }
 
     // Add mask
     cmd.arg(mask);
 
-    let output = cmd.output()
-        .map_err(|e| format!("Failed to run maskprocessor: {}", e))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to run maskprocessor: {e}"))?;
 
     if !output.status.success() {
-        return Err(format!("maskprocessor failed: {}",
-            String::from_utf8_lossy(&output.stderr)));
+        return Err(format!(
+            "maskprocessor failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
 
     Ok(output.stdout)
@@ -38,7 +41,7 @@ fn run_maskprocessor(mask: &str, charsets: &HashMap<usize, &str>) -> Result<Vec<
 fn run_hashcat_stdout(mask: &str, charsets: &HashMap<usize, &str>) -> Result<Vec<u8>, String> {
     // Find the project root (where Cargo.toml is)
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let hashcat_path = format!("{}/tools/hashcat/hashcat", manifest_dir);
+    let hashcat_path = format!("{manifest_dir}/tools/hashcat/hashcat");
 
     let mut cmd = Command::new(&hashcat_path);
     cmd.arg("--stdout");
@@ -46,30 +49,35 @@ fn run_hashcat_stdout(mask: &str, charsets: &HashMap<usize, &str>) -> Result<Vec
 
     // Add custom charsets
     for (id, charset) in charsets.iter() {
-        cmd.arg(format!("--custom-charset{}={}", id, charset));
+        cmd.arg(format!("--custom-charset{id}={charset}"));
     }
 
     // Add mask
     cmd.arg(mask);
 
-    let output = cmd.output()
-        .map_err(|e| format!("Failed to run hashcat: {}", e))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to run hashcat: {e}"))?;
 
     if !output.status.success() {
-        return Err(format!("hashcat failed: {}",
-            String::from_utf8_lossy(&output.stderr)));
+        return Err(format!(
+            "hashcat failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
 
     Ok(output.stdout)
 }
 
 /// Helper function to generate wordlist with our GPU implementation
-fn run_gpu_scatter_gather(mask_str: &str, charsets_map: &HashMap<usize, &str>) -> Result<Vec<u8>, String> {
-    use gpu_scatter_gather::{Mask, Charset};
+fn run_gpu_scatter_gather(
+    mask_str: &str,
+    charsets_map: &HashMap<usize, &str>,
+) -> Result<Vec<u8>, String> {
+    use gpu_scatter_gather::{Charset, Mask};
 
     // Parse the mask string
-    let mask = Mask::parse(mask_str)
-        .map_err(|e| format!("Failed to parse mask: {}", e))?;
+    let mask = Mask::parse(mask_str).map_err(|e| format!("Failed to parse mask: {e}"))?;
 
     // Build the generator with individual charset() calls
     let mut builder = WordlistGenerator::builder();
@@ -81,7 +89,7 @@ fn run_gpu_scatter_gather(mask_str: &str, charsets_map: &HashMap<usize, &str>) -
     let generator = builder
         .mask(mask.pattern())
         .build()
-        .map_err(|e| format!("Failed to build generator: {}", e))?;
+        .map_err(|e| format!("Failed to build generator: {e}"))?;
 
     // Generate all words
     let mut output = Vec::new();
@@ -102,16 +110,15 @@ fn test_cross_validation_small_simple() {
     charsets.insert(2, "123");
 
     // Generate with our tool
-    let our_output = run_gpu_scatter_gather(mask, &charsets)
-        .expect("GPU generation failed");
+    let our_output = run_gpu_scatter_gather(mask, &charsets).expect("GPU generation failed");
 
     // Generate with maskprocessor
-    let mp_output = run_maskprocessor(mask, &charsets)
-        .expect("maskprocessor failed");
+    let mp_output = run_maskprocessor(mask, &charsets).expect("maskprocessor failed");
 
     // Compare
     assert_eq!(
-        our_output, mp_output,
+        our_output,
+        mp_output,
         "Output mismatch with maskprocessor!\nOurs:\n{}\nMaskprocessor:\n{}",
         String::from_utf8_lossy(&our_output),
         String::from_utf8_lossy(&mp_output)
@@ -129,12 +136,10 @@ fn test_cross_validation_with_hashcat() {
     charsets.insert(2, "123");
 
     // Generate with our tool
-    let our_output = run_gpu_scatter_gather(mask, &charsets)
-        .expect("GPU generation failed");
+    let our_output = run_gpu_scatter_gather(mask, &charsets).expect("GPU generation failed");
 
     // Generate with hashcat
-    let hashcat_output = run_hashcat_stdout(mask, &charsets)
-        .expect("hashcat failed");
+    let hashcat_output = run_hashcat_stdout(mask, &charsets).expect("hashcat failed");
 
     // Parse into sets for order-independent comparison
     let our_words: std::collections::HashSet<Vec<u8>> = our_output
@@ -151,9 +156,11 @@ fn test_cross_validation_with_hashcat() {
 
     // Compare sets (order-independent)
     assert_eq!(
-        our_words.len(), hashcat_words.len(),
+        our_words.len(),
+        hashcat_words.len(),
         "Different number of words! Ours: {}, Hashcat: {}",
-        our_words.len(), hashcat_words.len()
+        our_words.len(),
+        hashcat_words.len()
     );
 
     // Find differences
@@ -163,8 +170,14 @@ fn test_cross_validation_with_hashcat() {
     assert!(
         in_ours_not_hashcat.is_empty() && in_hashcat_not_ours.is_empty(),
         "Word set mismatch!\nIn ours but not hashcat: {:?}\nIn hashcat but not ours: {:?}",
-        in_ours_not_hashcat.iter().map(|w| String::from_utf8_lossy(w)).collect::<Vec<_>>(),
-        in_hashcat_not_ours.iter().map(|w| String::from_utf8_lossy(w)).collect::<Vec<_>>()
+        in_ours_not_hashcat
+            .iter()
+            .map(|w| String::from_utf8_lossy(w))
+            .collect::<Vec<_>>(),
+        in_hashcat_not_ours
+            .iter()
+            .map(|w| String::from_utf8_lossy(w))
+            .collect::<Vec<_>>()
     );
 
     // If we reach here, both tools generate the exact same set of words
@@ -180,18 +193,18 @@ fn test_cross_validation_medium() {
     charsets.insert(2, "0123456789");
 
     // Generate with our tool
-    let our_output = run_gpu_scatter_gather(mask, &charsets)
-        .expect("GPU generation failed");
+    let our_output = run_gpu_scatter_gather(mask, &charsets).expect("GPU generation failed");
 
     // Generate with maskprocessor
-    let mp_output = run_maskprocessor(mask, &charsets)
-        .expect("maskprocessor failed");
+    let mp_output = run_maskprocessor(mask, &charsets).expect("maskprocessor failed");
 
     // Compare lengths first (faster check)
     assert_eq!(
-        our_output.len(), mp_output.len(),
+        our_output.len(),
+        mp_output.len(),
         "Output length mismatch with maskprocessor! Ours: {}, MP: {}",
-        our_output.len(), mp_output.len()
+        our_output.len(),
+        mp_output.len()
     );
 
     // Full comparison
@@ -209,19 +222,27 @@ fn test_cross_validation_single_charset() {
     charsets.insert(1, "0123456789");
 
     // Generate with our tool
-    let our_output = run_gpu_scatter_gather(mask, &charsets)
-        .expect("GPU generation failed");
+    let our_output = run_gpu_scatter_gather(mask, &charsets).expect("GPU generation failed");
 
     // Generate with maskprocessor
-    let mp_output = run_maskprocessor(mask, &charsets)
-        .expect("maskprocessor failed");
+    let mp_output = run_maskprocessor(mask, &charsets).expect("maskprocessor failed");
 
     // Should generate 10^4 = 10,000 combinations
     let expected_count = 10000;
-    let our_lines: Vec<&[u8]> = our_output.split(|&b| b == b'\n').filter(|l| !l.is_empty()).collect();
-    let mp_lines: Vec<&[u8]> = mp_output.split(|&b| b == b'\n').filter(|l| !l.is_empty()).collect();
+    let our_lines: Vec<&[u8]> = our_output
+        .split(|&b| b == b'\n')
+        .filter(|l| !l.is_empty())
+        .collect();
+    let mp_lines: Vec<&[u8]> = mp_output
+        .split(|&b| b == b'\n')
+        .filter(|l| !l.is_empty())
+        .collect();
 
-    assert_eq!(our_lines.len(), expected_count, "Wrong number of combinations");
+    assert_eq!(
+        our_lines.len(),
+        expected_count,
+        "Wrong number of combinations"
+    );
     assert_eq!(mp_lines.len(), expected_count, "maskprocessor wrong count");
     assert_eq!(our_output, mp_output, "Output mismatch with maskprocessor!");
 }
@@ -236,18 +257,23 @@ fn test_cross_validation_mixed_charsets() {
     charsets.insert(3, "xyz");
 
     // Generate with our tool
-    let our_output = run_gpu_scatter_gather(mask, &charsets)
-        .expect("GPU generation failed");
+    let our_output = run_gpu_scatter_gather(mask, &charsets).expect("GPU generation failed");
 
     // Generate with maskprocessor
-    let mp_output = run_maskprocessor(mask, &charsets)
-        .expect("maskprocessor failed");
+    let mp_output = run_maskprocessor(mask, &charsets).expect("maskprocessor failed");
 
     // Should generate 3x3x3 = 27 combinations
     let expected_count = 27;
-    let our_lines: Vec<&[u8]> = our_output.split(|&b| b == b'\n').filter(|l| !l.is_empty()).collect();
+    let our_lines: Vec<&[u8]> = our_output
+        .split(|&b| b == b'\n')
+        .filter(|l| !l.is_empty())
+        .collect();
 
-    assert_eq!(our_lines.len(), expected_count, "Wrong number of combinations");
+    assert_eq!(
+        our_lines.len(),
+        expected_count,
+        "Wrong number of combinations"
+    );
     assert_eq!(our_output, mp_output, "Output mismatch with maskprocessor!");
 }
 
@@ -278,13 +304,14 @@ fn test_cross_validation_special_characters() {
     charsets.insert(2, "^&*()");
 
     // Generate with our tool
-    let our_output = run_gpu_scatter_gather(mask, &charsets)
-        .expect("GPU generation failed");
+    let our_output = run_gpu_scatter_gather(mask, &charsets).expect("GPU generation failed");
 
     // Generate with maskprocessor
-    let mp_output = run_maskprocessor(mask, &charsets)
-        .expect("maskprocessor failed");
+    let mp_output = run_maskprocessor(mask, &charsets).expect("maskprocessor failed");
 
     // Should generate 5x5 = 25 combinations
-    assert_eq!(our_output, mp_output, "Output mismatch with special characters!");
+    assert_eq!(
+        our_output, mp_output,
+        "Output mismatch with special characters!"
+    );
 }

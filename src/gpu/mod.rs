@@ -52,7 +52,7 @@ impl GpuContext {
             // Get device
             let mut device = 0;
             check_cuda(cuDeviceGet(&mut device, device_id))
-                .with_context(|| format!("Failed to get CUDA device {}", device_id))?;
+                .with_context(|| format!("Failed to get CUDA device {device_id}"))?;
 
             // Get compute capability
             let mut compute_capability_major = 0;
@@ -82,28 +82,43 @@ impl GpuContext {
             );
 
             let ptx_data = std::fs::read(&ptx_path)
-                .with_context(|| format!("Failed to read PTX file: {}", ptx_path))?;
+                .with_context(|| format!("Failed to read PTX file: {ptx_path}"))?;
             let ptx_cstring = CString::new(ptx_data)?;
 
             let mut module = ptr::null_mut();
-            check_cuda(cuModuleLoadData(&mut module, ptx_cstring.as_ptr() as *const _))
-                .context("Failed to load CUDA module")?;
+            check_cuda(cuModuleLoadData(
+                &mut module,
+                ptx_cstring.as_ptr() as *const _,
+            ))
+            .context("Failed to load CUDA module")?;
 
             // Get kernel functions
             let kernel_name = CString::new("generate_words_kernel")?;
             let mut kernel = ptr::null_mut();
-            check_cuda(cuModuleGetFunction(&mut kernel, module, kernel_name.as_ptr()))
-                .context("Failed to get kernel function")?;
+            check_cuda(cuModuleGetFunction(
+                &mut kernel,
+                module,
+                kernel_name.as_ptr(),
+            ))
+            .context("Failed to get kernel function")?;
 
             let kernel_transposed_name = CString::new("generate_words_transposed_kernel")?;
             let mut kernel_transposed = ptr::null_mut();
-            check_cuda(cuModuleGetFunction(&mut kernel_transposed, module, kernel_transposed_name.as_ptr()))
-                .context("Failed to get transposed kernel function")?;
+            check_cuda(cuModuleGetFunction(
+                &mut kernel_transposed,
+                module,
+                kernel_transposed_name.as_ptr(),
+            ))
+            .context("Failed to get transposed kernel function")?;
 
             let kernel_columnmajor_name = CString::new("generate_words_columnmajor_kernel")?;
             let mut kernel_columnmajor = ptr::null_mut();
-            check_cuda(cuModuleGetFunction(&mut kernel_columnmajor, module, kernel_columnmajor_name.as_ptr()))
-                .context("Failed to get columnmajor kernel function")?;
+            check_cuda(cuModuleGetFunction(
+                &mut kernel_columnmajor,
+                module,
+                kernel_columnmajor_name.as_ptr(),
+            ))
+            .context("Failed to get columnmajor kernel function")?;
 
             Ok(Self {
                 context,
@@ -182,7 +197,15 @@ impl GpuContext {
         batch_size: u64,
         output_format: i32,
     ) -> Result<Vec<u8>> {
-        self.generate_batch_internal(charsets, mask, start_idx, batch_size, false, false, output_format)
+        self.generate_batch_internal(
+            charsets,
+            mask,
+            start_idx,
+            batch_size,
+            false,
+            false,
+            output_format,
+        )
     }
 
     /// Generate words using GPU with transposed writes (fully coalesced)
@@ -194,7 +217,15 @@ impl GpuContext {
         batch_size: u64,
         output_format: i32,
     ) -> Result<Vec<u8>> {
-        self.generate_batch_internal(charsets, mask, start_idx, batch_size, true, false, output_format)
+        self.generate_batch_internal(
+            charsets,
+            mask,
+            start_idx,
+            batch_size,
+            true,
+            false,
+            output_format,
+        )
     }
 
     /// Generate batch on device with optional stream (async)
@@ -251,10 +282,10 @@ impl GpuContext {
 
             // Calculate output size based on format
             let bytes_per_word = match output_format {
-                0 => word_length as usize + 1,  // WG_FORMAT_NEWLINES
-                1 => word_length as usize + 1,  // WG_FORMAT_FIXED_WIDTH (pad with \0)
-                2 => word_length as usize,      // WG_FORMAT_PACKED (no separator)
-                _ => word_length as usize + 1,  // fallback
+                0 => word_length as usize + 1, // WG_FORMAT_NEWLINES
+                1 => word_length as usize + 1, // WG_FORMAT_FIXED_WIDTH (pad with \0)
+                2 => word_length as usize,     // WG_FORMAT_PACKED (no separator)
+                _ => word_length as usize + 1, // fallback
             };
             let output_size = batch_size as usize * bytes_per_word;
 
@@ -324,7 +355,7 @@ impl GpuContext {
 
             // Launch kernel
             let block_size: u32 = 256;
-            let grid_size: u32 = ((batch_size + block_size as u64 - 1) / block_size as u64) as u32;
+            let grid_size: u32 = batch_size.div_ceil(block_size as u64) as u32;
 
             let mut params = [
                 &d_charset_data as *const _ as *mut _,
@@ -347,7 +378,7 @@ impl GpuContext {
                 1,
                 1,
                 0,
-                stream,  // Use provided stream (null for default)
+                stream, // Use provided stream (null for default)
                 params.as_mut_ptr(),
                 ptr::null_mut(),
             ))?;
@@ -446,10 +477,10 @@ impl GpuContext {
 
             // Calculate output size based on format
             let bytes_per_word = match output_format {
-                0 => word_length as usize + 1,  // WG_FORMAT_NEWLINES
-                1 => word_length as usize + 1,  // WG_FORMAT_FIXED_WIDTH (pad with \0)
-                2 => word_length as usize,      // WG_FORMAT_PACKED (no separator)
-                _ => word_length as usize + 1,  // fallback
+                0 => word_length as usize + 1, // WG_FORMAT_NEWLINES
+                1 => word_length as usize + 1, // WG_FORMAT_FIXED_WIDTH (pad with \0)
+                2 => word_length as usize,     // WG_FORMAT_PACKED (no separator)
+                _ => word_length as usize + 1, // fallback
             };
             let output_size = batch_size as usize * bytes_per_word;
 
@@ -492,7 +523,7 @@ impl GpuContext {
 
             // Launch kernel (use standard kernel for now)
             let block_size: u32 = 256;
-            let grid_size: u32 = ((batch_size + block_size as u64 - 1) / block_size as u64) as u32;
+            let grid_size: u32 = batch_size.div_ceil(block_size as u64) as u32;
 
             let mut params = [
                 &d_charset_data as *const _ as *mut _,
@@ -568,10 +599,10 @@ impl GpuContext {
 
             // Calculate output size based on format
             let bytes_per_word = match output_format {
-                0 => word_length as usize + 1,  // WG_FORMAT_NEWLINES
-                1 => word_length as usize + 1,  // WG_FORMAT_FIXED_WIDTH (pad with \0)
-                2 => word_length as usize,      // WG_FORMAT_PACKED (no separator)
-                _ => word_length as usize + 1,  // fallback
+                0 => word_length as usize + 1, // WG_FORMAT_NEWLINES
+                1 => word_length as usize + 1, // WG_FORMAT_FIXED_WIDTH (pad with \0)
+                2 => word_length as usize,     // WG_FORMAT_PACKED (no separator)
+                _ => word_length as usize + 1, // fallback
             };
             let output_size = batch_size as usize * bytes_per_word;
 
@@ -622,7 +653,7 @@ impl GpuContext {
 
             // Launch kernel
             let block_size: u32 = 256;
-            let grid_size: u32 = ((batch_size + block_size as u64 - 1) / block_size as u64) as u32;
+            let grid_size: u32 = batch_size.div_ceil(block_size as u64) as u32;
 
             let mut params = [
                 &d_charset_data as *const _ as *mut _,
@@ -705,9 +736,9 @@ unsafe fn check_cuda(result: CUresult) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         } else {
-            format!("CUDA error code: {:?}", result)
+            format!("CUDA error code: {result:?}")
         };
-        anyhow::bail!("CUDA error: {}", error_msg);
+        anyhow::bail!("CUDA error: {error_msg}");
     }
     Ok(())
 }

@@ -9,7 +9,7 @@ fn main() -> Result<()> {
 
     println!("Transpose Performance Test");
     println!("Words: {} M", num_words / 1_000_000);
-    println!("Word length: {}", word_length);
+    println!("Word length: {word_length}");
     println!("Data size: {} MB\n", (num_words * word_length) / 1_000_000);
 
     // Create column-major test data
@@ -23,18 +23,26 @@ fn main() -> Result<()> {
     println!("Done.\n");
 
     // Warm up
-    let _ = gpu_scatter_gather::transpose::transpose_to_rowmajor(&column_major[0..1000 * word_length], 1000, word_length)?;
+    let _ = gpu_scatter_gather::transpose::transpose_to_rowmajor(
+        &column_major[0..1000 * word_length],
+        1000,
+        word_length,
+    )?;
 
     // Benchmark
     println!("Benchmarking transpose...");
     let start = Instant::now();
-    let _row_major = gpu_scatter_gather::transpose::transpose_to_rowmajor(&column_major, num_words, word_length)?;
+    let _row_major = gpu_scatter_gather::transpose::transpose_to_rowmajor(
+        &column_major,
+        num_words,
+        word_length,
+    )?;
     let duration = start.elapsed();
 
     let throughput_gb_s = (num_words * word_length) as f64 / duration.as_secs_f64() / 1e9;
 
     println!("Time: {:.2} ms", duration.as_secs_f64() * 1000.0);
-    println!("Throughput: {:.2} GB/s", throughput_gb_s);
+    println!("Throughput: {throughput_gb_s:.2} GB/s");
     println!();
 
     // Compare to memcpy baseline
@@ -46,10 +54,13 @@ fn main() -> Result<()> {
     let memcpy_throughput = (num_words * word_length) as f64 / memcpy_duration.as_secs_f64() / 1e9;
 
     println!("Time: {:.2} ms", memcpy_duration.as_secs_f64() * 1000.0);
-    println!("Throughput: {:.2} GB/s", memcpy_throughput);
+    println!("Throughput: {memcpy_throughput:.2} GB/s");
     println!();
 
-    println!("Transpose overhead: {:.1}x slower than memcpy", throughput_gb_s / memcpy_throughput);
+    println!(
+        "Transpose overhead: {:.1}x slower than memcpy",
+        throughput_gb_s / memcpy_throughput
+    );
 
     Ok(())
 }

@@ -38,7 +38,7 @@ fn main() -> Result<()> {
         anyhow::bail!("No CUDA devices found");
     }
 
-    println!("CUDA Devices Found: {}", device_count);
+    println!("CUDA Devices Found: {device_count}");
     println!();
 
     // Print device information
@@ -46,7 +46,9 @@ fn main() -> Result<()> {
         let gpu = GpuContext::with_device(device_id)?;
         let device_name = gpu.device_name()?;
         let (major, minor) = gpu.compute_capability();
-        println!("  Device {}: {} (sm_{}{})", device_id, device_name, major, minor);
+        println!(
+            "  Device {device_id}: {device_name} (sm_{major}{minor})"
+        );
     }
     println!();
 
@@ -56,13 +58,25 @@ fn main() -> Result<()> {
 
     let mut charsets = HashMap::new();
     charsets.insert(0, lowercase); // ?l
-    charsets.insert(1, digits);     // ?d
+    charsets.insert(1, digits); // ?d
 
     // Test configurations: (word_length, num_lowercase, num_digits, description, keyspace)
     let test_configs = vec![
-        (8,  4, 4, "?l?l?l?l?d?d?d?d", 26u64.pow(4) * 10u64.pow(4)),          // 456,976,000
-        (10, 6, 4, "?l?l?l?l?l?l?d?d?d?d", 26u64.pow(6) * 10u64.pow(4)),      // 3,089,157,760,000
-        (12, 8, 4, "?l?l?l?l?l?l?l?l?d?d?d?d", 26u64.pow(8) * 10u64.pow(4)), // 20,863,377,862,720,000
+        (8, 4, 4, "?l?l?l?l?d?d?d?d", 26u64.pow(4) * 10u64.pow(4)), // 456,976,000
+        (
+            10,
+            6,
+            4,
+            "?l?l?l?l?l?l?d?d?d?d",
+            26u64.pow(6) * 10u64.pow(4),
+        ), // 3,089,157,760,000
+        (
+            12,
+            8,
+            4,
+            "?l?l?l?l?l?l?l?l?d?d?d?d",
+            26u64.pow(8) * 10u64.pow(4),
+        ), // 20,863,377,862,720,000
     ];
 
     // Batch size to test (large enough to saturate multiple GPUs)
@@ -71,22 +85,32 @@ fn main() -> Result<()> {
     println!("{}", "=".repeat(70));
     println!("BENCHMARK CONFIGURATION");
     println!("{}", "=".repeat(70));
-    println!("Batch Size: {} words ({:.2e})", batch_size, batch_size as f64);
+    println!(
+        "Batch Size: {} words ({:.2e})",
+        batch_size, batch_size as f64
+    );
     println!();
 
     for (word_length, num_lower, num_digit, pattern, keyspace) in test_configs {
         // Skip if batch size exceeds keyspace
         if batch_size > keyspace {
-            println!("⏭  Skipping {}-char passwords: batch exceeds keyspace", word_length);
+            println!(
+                "⏭  Skipping {word_length}-char passwords: batch exceeds keyspace"
+            );
             println!();
             continue;
         }
 
         println!("{}", "=".repeat(70));
-        println!("📊 Testing {}-character passwords: {}", word_length, pattern);
+        println!(
+            "📊 Testing {word_length}-character passwords: {pattern}"
+        );
         println!("{}", "=".repeat(70));
-        println!("   Lowercase: {}, Digits: {}", num_lower, num_digit);
-        println!("   Total keyspace: {} combinations ({:.2e})", keyspace, keyspace as f64);
+        println!("   Lowercase: {num_lower}, Digits: {num_digit}");
+        println!(
+            "   Total keyspace: {} combinations ({:.2e})",
+            keyspace, keyspace as f64
+        );
         println!();
 
         // Build mask pattern
@@ -102,18 +126,14 @@ fn main() -> Result<()> {
         println!("🔷 Single GPU Baseline (Device 0)");
         println!("{}", "-".repeat(70));
 
-        let single_gpu_throughput = benchmark_single_gpu(
-            &charsets,
-            &mask,
-            batch_size,
-            word_length,
-        )?;
+        let single_gpu_throughput =
+            benchmark_single_gpu(&charsets, &mask, batch_size, word_length)?;
 
         println!();
 
         // Test 2: Multi-GPU (all available devices)
         if device_count > 1 {
-            println!("🔶 Multi-GPU ({} devices)", device_count);
+            println!("🔶 Multi-GPU ({device_count} devices)");
             println!("{}", "-".repeat(70));
 
             let multi_gpu_throughput = benchmark_multi_gpu(
@@ -132,11 +152,24 @@ fn main() -> Result<()> {
 
             println!("📈 SCALING ANALYSIS");
             println!("{}", "-".repeat(70));
-            println!("   Single GPU:       {:>10.2} M words/s", single_gpu_throughput / 1e6);
-            println!("   Multi-GPU ({}x):    {:>10.2} M words/s", device_count, multi_gpu_throughput / 1e6);
-            println!("   Expected (ideal): {:>10.2} M words/s", expected_throughput / 1e6);
-            println!("   Speedup:          {:>10.2}x", multi_gpu_throughput / single_gpu_throughput);
-            println!("   Efficiency:       {:>10.2}%", scaling_efficiency);
+            println!(
+                "   Single GPU:       {:>10.2} M words/s",
+                single_gpu_throughput / 1e6
+            );
+            println!(
+                "   Multi-GPU ({}x):    {:>10.2} M words/s",
+                device_count,
+                multi_gpu_throughput / 1e6
+            );
+            println!(
+                "   Expected (ideal): {:>10.2} M words/s",
+                expected_throughput / 1e6
+            );
+            println!(
+                "   Speedup:          {:>10.2}x",
+                multi_gpu_throughput / single_gpu_throughput
+            );
+            println!("   Efficiency:       {scaling_efficiency:>10.2}%");
             println!();
 
             if scaling_efficiency >= 90.0 {
@@ -267,9 +300,9 @@ unsafe fn check_cuda(result: CUresult) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         } else {
-            format!("CUDA error code: {:?}", result)
+            format!("CUDA error code: {result:?}")
         };
-        anyhow::bail!("CUDA error: {}", error_msg);
+        anyhow::bail!("CUDA error: {error_msg}");
     }
     Ok(())
 }

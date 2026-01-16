@@ -2,13 +2,13 @@
 //!
 //! This module provides support for distributing wordlist generation across multiple GPUs.
 
+use crate::gpu::GpuContext;
 use anyhow::{Context, Result};
+use cuda_driver_sys::*;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use crate::gpu::GpuContext;
-use cuda_driver_sys::*;
 
 /// Performance statistics for a single GPU
 ///
@@ -51,7 +51,7 @@ impl GpuStats {
         // Exponential moving average: new_estimate = alpha * new + (1 - alpha) * old
         const ALPHA: f64 = 0.2;
         self.throughput_estimate = if self.sample_count == 0 {
-            throughput  // First sample
+            throughput // First sample
         } else {
             ALPHA * throughput + (1.0 - ALPHA) * self.throughput_estimate
         };
@@ -66,7 +66,7 @@ impl GpuStats {
 
     /// Check if we have enough samples for reliable estimates
     fn has_reliable_estimate(&self) -> bool {
-        self.sample_count >= 3  // Need at least 3 samples
+        self.sample_count >= 3 // Need at least 3 samples
     }
 }
 
@@ -145,11 +145,13 @@ impl PinnedBuffer {
             let result = cuMemHostAlloc(
                 &mut ptr,
                 size,
-                CU_MEMHOSTALLOC_PORTABLE,  // Allow access from any CUDA context
+                CU_MEMHOSTALLOC_PORTABLE, // Allow access from any CUDA context
             );
 
             if result != CUresult::CUDA_SUCCESS {
-                anyhow::bail!("Failed to allocate {} bytes of pinned memory: {:?}", size, result);
+                anyhow::bail!(
+                    "Failed to allocate {size} bytes of pinned memory: {result:?}"
+                );
             }
 
             Ok(Self {
@@ -196,7 +198,7 @@ impl Drop for PinnedBuffer {
         unsafe {
             let result = cuMemFreeHost(self.ptr as *mut std::ffi::c_void);
             if result != CUresult::CUDA_SUCCESS {
-                eprintln!("Warning: Failed to free pinned memory: {:?}", result);
+                eprintln!("Warning: Failed to free pinned memory: {result:?}");
             }
         }
     }
@@ -292,7 +294,7 @@ impl GpuWorker {
     /// Create a new GPU worker for the specified device
     pub fn new(device_id: i32) -> Result<Self> {
         let context = GpuContext::with_device(device_id)
-            .with_context(|| format!("Failed to create GPU context for device {}", device_id))?;
+            .with_context(|| format!("Failed to create GPU context for device {device_id}"))?;
 
         Ok(Self {
             device_id,
@@ -308,12 +310,12 @@ impl GpuWorker {
     /// creates streams in worker threads instead.
     pub fn new_with_stream(device_id: i32) -> Result<Self> {
         let context = GpuContext::with_device(device_id)
-            .with_context(|| format!("Failed to create GPU context for device {}", device_id))?;
+            .with_context(|| format!("Failed to create GPU context for device {device_id}"))?;
 
         Ok(Self {
             device_id,
             context,
-            stream: None,  // Streams created in worker threads, not here
+            stream: None, // Streams created in worker threads, not here
         })
     }
 
@@ -388,7 +390,9 @@ impl MultiGpuContext {
         let device_count = unsafe {
             cuda_driver_sys::cuInit(0);
             let mut count = 0;
-            if cuda_driver_sys::cuDeviceGetCount(&mut count) != cuda_driver_sys::CUresult::CUDA_SUCCESS {
+            if cuda_driver_sys::cuDeviceGetCount(&mut count)
+                != cuda_driver_sys::CUresult::CUDA_SUCCESS
+            {
                 anyhow::bail!("Failed to get device count");
             }
             count
@@ -430,7 +434,7 @@ impl MultiGpuContext {
                 Ok(worker) => workers.push(worker),
                 Err(e) => {
                     // Log warning but continue with remaining devices
-                    eprintln!("Warning: Failed to initialize device {}: {}", device_id, e);
+                    eprintln!("Warning: Failed to initialize device {device_id}: {e}");
                     eprintln!("Continuing with remaining devices...");
                 }
             }
@@ -456,7 +460,9 @@ impl MultiGpuContext {
                     let gpu_ctx = match GpuContext::with_device(device_id) {
                         Ok(ctx) => ctx,
                         Err(e) => {
-                            eprintln!("Worker thread for GPU {} failed to create context: {}", device_id, e);
+                            eprintln!(
+                                "Worker thread for GPU {device_id} failed to create context: {e}"
+                            );
                             return;
                         }
                     };
@@ -467,7 +473,9 @@ impl MultiGpuContext {
                             let mut stream_ptr: CUstream = std::ptr::null_mut();
                             let result = cuStreamCreate(&mut stream_ptr, 0);
                             if result != CUresult::CUDA_SUCCESS {
-                                eprintln!("Worker thread for GPU {} failed to create stream: {:?}", device_id, result);
+                                eprintln!(
+                                    "Worker thread for GPU {device_id} failed to create stream: {result:?}"
+                                );
                                 return;
                             }
                             stream_ptr
@@ -513,21 +521,23 @@ impl MultiGpuContext {
 
             Some(threads)
         } else {
-            None  // Single GPU uses fast path
+            None // Single GPU uses fast path
         };
 
         // Allocate pinned memory buffers (one per worker)
         // Default: 1 GB per buffer, covers ~111M 8-char words
-        let max_buffer_size = 1_000_000_000;  // 1 GB per worker
+        let max_buffer_size = 1_000_000_000; // 1 GB per worker
         let pinned_buffers: Vec<PinnedBuffer> = (0..num_devices)
             .map(|_| PinnedBuffer::new(max_buffer_size))
             .collect::<Result<Vec<_>>>()
-            .with_context(|| format!("Failed to allocate pinned memory for {} workers", num_devices))?;
+            .with_context(|| {
+                format!(
+                    "Failed to allocate pinned memory for {num_devices} workers"
+                )
+            })?;
 
         // Initialize GPU stats (one per device)
-        let gpu_stats: Vec<GpuStats> = (0..num_devices)
-            .map(|_| GpuStats::new())
-            .collect();
+        let gpu_stats: Vec<GpuStats> = (0..num_devices).map(|_| GpuStats::new()).collect();
 
         Ok(Self {
             workers,
@@ -610,9 +620,7 @@ impl MultiGpuContext {
     /// - GPU 1 gets 37.5% of work (300 / (500 + 300))
     fn adaptive_partition(&self, start_idx: u64, total_work: u64) -> Vec<KeyspacePartition> {
         // Calculate total throughput across all GPUs
-        let total_throughput: f64 = self.gpu_stats.iter()
-            .map(|s| s.throughput())
-            .sum();
+        let total_throughput: f64 = self.gpu_stats.iter().map(|s| s.throughput()).sum();
 
         if total_throughput == 0.0 {
             // Fallback to static partitioning if no throughput data
@@ -668,10 +676,10 @@ impl MultiGpuContext {
             // Calculate output size
             let word_length = mask.len();
             let bytes_per_word = match output_format {
-                0 => word_length + 1,  // WG_FORMAT_NEWLINES
-                1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
-                2 => word_length,      // WG_FORMAT_PACKED
-                _ => word_length + 1,  // fallback
+                0 => word_length + 1, // WG_FORMAT_NEWLINES
+                1 => word_length + 1, // WG_FORMAT_FIXED_WIDTH
+                2 => word_length,     // WG_FORMAT_PACKED
+                _ => word_length + 1, // fallback
             };
             let output_size = partition.count as usize * bytes_per_word;
 
@@ -687,7 +695,9 @@ impl MultiGpuContext {
 
             // Verify size
             if size != output_size {
-                eprintln!("[WARNING] Size mismatch! expected={}, got={}", output_size, size);
+                eprintln!(
+                    "[WARNING] Size mismatch! expected={output_size}, got={size}"
+                );
             }
 
             // Copy directly to pinned memory (FAST! ~2x faster than pageable)
@@ -708,7 +718,7 @@ impl MultiGpuContext {
 
             if copy_result != CUresult::CUDA_SUCCESS {
                 let _ = cuMemFree_v2(device_ptr);
-                anyhow::bail!("Failed to copy results to pinned memory: {:?}", copy_result);
+                anyhow::bail!("Failed to copy results to pinned memory: {copy_result:?}");
             }
 
             // Synchronize stream to ensure copy completes
@@ -716,7 +726,7 @@ impl MultiGpuContext {
                 let sync_result = cuStreamSynchronize(stream);
                 if sync_result != CUresult::CUDA_SUCCESS {
                     let _ = cuMemFree_v2(device_ptr);
-                    anyhow::bail!("Failed to synchronize stream: {:?}", sync_result);
+                    anyhow::bail!("Failed to synchronize stream: {sync_result:?}");
                 }
             } else {
                 let _ = cuCtxSynchronize();
@@ -811,9 +821,14 @@ impl MultiGpuContext {
         batch_size: u64,
         output_format: i32,
     ) -> Result<Vec<u8>> {
-        self.generate_batch_with(charsets, mask, start_idx, batch_size, output_format, |data| {
-            data.to_vec()
-        })
+        self.generate_batch_with(
+            charsets,
+            mask,
+            start_idx,
+            batch_size,
+            output_format,
+            |data| data.to_vec(),
+        )
     }
 
     /// Generate batch with callback (synchronous version)
@@ -849,10 +864,10 @@ impl MultiGpuContext {
                 // Calculate output size
                 let word_length = mask.len();
                 let bytes_per_word = match output_format {
-                    0 => word_length + 1,  // WG_FORMAT_NEWLINES
-                    1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
-                    2 => word_length,      // WG_FORMAT_PACKED
-                    _ => word_length + 1,  // fallback
+                    0 => word_length + 1, // WG_FORMAT_NEWLINES
+                    1 => word_length + 1, // WG_FORMAT_FIXED_WIDTH
+                    2 => word_length,     // WG_FORMAT_PACKED
+                    _ => word_length + 1, // fallback
                 };
                 let _output_size = batch_size as usize * bytes_per_word;
 
@@ -865,20 +880,17 @@ impl MultiGpuContext {
                     mask,
                     start_idx,
                     batch_size,
-                    std::ptr::null_mut(),  // No stream for single GPU
+                    std::ptr::null_mut(), // No stream for single GPU
                     output_format,
                 )?;
 
                 // Copy to pinned memory
-                let copy_result = cuMemcpyDtoH_v2(
-                    pinned_ptr as *mut std::ffi::c_void,
-                    device_ptr,
-                    size,
-                );
+                let copy_result =
+                    cuMemcpyDtoH_v2(pinned_ptr as *mut std::ffi::c_void, device_ptr, size);
 
                 if copy_result != CUresult::CUDA_SUCCESS {
                     let _ = cuMemFree_v2(device_ptr);
-                    anyhow::bail!("Failed to copy to pinned memory: {:?}", copy_result);
+                    anyhow::bail!("Failed to copy to pinned memory: {copy_result:?}");
                 }
 
                 // Synchronize
@@ -900,7 +912,9 @@ impl MultiGpuContext {
         let partitions = self.partition(start_idx, batch_size);
 
         // Get reference to worker threads
-        let worker_threads = self.worker_threads.as_ref()
+        let worker_threads = self
+            .worker_threads
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Worker threads not initialized"))?;
 
         // Create result channels for each worker
@@ -929,8 +943,10 @@ impl MultiGpuContext {
             };
 
             // Send work to persistent worker thread
-            worker_threads[gpu_idx].0.send(WorkerMessage::Work(work_item))
-                .map_err(|e| anyhow::anyhow!("Failed to send work to GPU {}: {}", gpu_idx, e))?;
+            worker_threads[gpu_idx]
+                .0
+                .send(WorkerMessage::Work(work_item))
+                .map_err(|e| anyhow::anyhow!("Failed to send work to GPU {gpu_idx}: {e}"))?;
 
             result_receivers.push((result_rx, gpu_idx));
         }
@@ -939,8 +955,9 @@ impl MultiGpuContext {
         let results: Vec<(usize, Duration, usize)> = result_receivers
             .into_iter()
             .map(|(rx, worker_id)| {
-                let (size, duration) = rx.recv()
-                    .with_context(|| format!("Failed to receive from GPU {}", worker_id))??;
+                let (size, duration) = rx
+                    .recv()
+                    .with_context(|| format!("Failed to receive from GPU {worker_id}"))??;
                 Ok((size, duration, worker_id))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -949,10 +966,10 @@ impl MultiGpuContext {
         for &(size, duration, worker_id) in &results {
             let word_length = mask.len();
             let bytes_per_word = match output_format {
-                0 => word_length + 1,  // WG_FORMAT_NEWLINES
-                1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
-                2 => word_length,      // WG_FORMAT_PACKED
-                _ => word_length + 1,  // fallback
+                0 => word_length + 1, // WG_FORMAT_NEWLINES
+                1 => word_length + 1, // WG_FORMAT_FIXED_WIDTH
+                2 => word_length,     // WG_FORMAT_PACKED
+                _ => word_length + 1, // fallback
             };
             let words = size / bytes_per_word;
             self.gpu_stats[worker_id].record_completion(duration, words as u64);
@@ -1022,10 +1039,10 @@ impl MultiGpuContext {
                 // Calculate output size
                 let word_length = mask.len();
                 let bytes_per_word = match output_format {
-                    0 => word_length + 1,  // WG_FORMAT_NEWLINES
-                    1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
-                    2 => word_length,      // WG_FORMAT_PACKED
-                    _ => word_length + 1,  // fallback
+                    0 => word_length + 1, // WG_FORMAT_NEWLINES
+                    1 => word_length + 1, // WG_FORMAT_FIXED_WIDTH
+                    2 => word_length,     // WG_FORMAT_PACKED
+                    _ => word_length + 1, // fallback
                 };
                 let _output_size = batch_size as usize * bytes_per_word;
 
@@ -1038,20 +1055,17 @@ impl MultiGpuContext {
                     mask,
                     start_idx,
                     batch_size,
-                    std::ptr::null_mut(),  // No stream for single GPU
+                    std::ptr::null_mut(), // No stream for single GPU
                     output_format,
                 )?;
 
                 // Copy to pinned memory
-                let copy_result = cuMemcpyDtoH_v2(
-                    pinned_ptr as *mut std::ffi::c_void,
-                    device_ptr,
-                    size,
-                );
+                let copy_result =
+                    cuMemcpyDtoH_v2(pinned_ptr as *mut std::ffi::c_void, device_ptr, size);
 
                 if copy_result != CUresult::CUDA_SUCCESS {
                     let _ = cuMemFree_v2(device_ptr);
-                    anyhow::bail!("Failed to copy to pinned memory: {:?}", copy_result);
+                    anyhow::bail!("Failed to copy to pinned memory: {copy_result:?}");
                 }
 
                 // Synchronize
@@ -1073,7 +1087,9 @@ impl MultiGpuContext {
         let partitions = self.partition(start_idx, batch_size);
 
         // Get reference to worker threads
-        let worker_threads = self.worker_threads.as_ref()
+        let worker_threads = self
+            .worker_threads
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Worker threads not initialized"))?;
 
         // Create result channels for each worker
@@ -1102,8 +1118,10 @@ impl MultiGpuContext {
             };
 
             // Send work to persistent worker thread
-            worker_threads[gpu_idx].0.send(WorkerMessage::Work(work_item))
-                .map_err(|e| anyhow::anyhow!("Failed to send work to GPU {}: {}", gpu_idx, e))?;
+            worker_threads[gpu_idx]
+                .0
+                .send(WorkerMessage::Work(work_item))
+                .map_err(|e| anyhow::anyhow!("Failed to send work to GPU {gpu_idx}: {e}"))?;
 
             result_receivers.push((result_rx, gpu_idx));
         }
@@ -1112,8 +1130,9 @@ impl MultiGpuContext {
         let results: Vec<(usize, Duration, usize)> = result_receivers
             .into_iter()
             .map(|(rx, worker_id)| {
-                let (size, duration) = rx.recv()
-                    .with_context(|| format!("Failed to receive from GPU {}", worker_id))??;
+                let (size, duration) = rx
+                    .recv()
+                    .with_context(|| format!("Failed to receive from GPU {worker_id}"))??;
                 Ok((size, duration, worker_id))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -1122,10 +1141,10 @@ impl MultiGpuContext {
         for &(size, duration, worker_id) in &results {
             let word_length = mask.len();
             let bytes_per_word = match output_format {
-                0 => word_length + 1,  // WG_FORMAT_NEWLINES
-                1 => word_length + 1,  // WG_FORMAT_FIXED_WIDTH
-                2 => word_length,      // WG_FORMAT_PACKED
-                _ => word_length + 1,  // fallback
+                0 => word_length + 1, // WG_FORMAT_NEWLINES
+                1 => word_length + 1, // WG_FORMAT_FIXED_WIDTH
+                2 => word_length,     // WG_FORMAT_PACKED
+                _ => word_length + 1, // fallback
             };
             let words = size / bytes_per_word;
             self.gpu_stats[worker_id].record_completion(duration, words as u64);
@@ -1273,10 +1292,13 @@ mod tests {
         match MultiGpuContext::new() {
             Ok(ctx) => {
                 assert!(ctx.num_devices() >= 1);
-                println!("Created multi-GPU context with {} device(s)", ctx.num_devices());
+                println!(
+                    "Created multi-GPU context with {} device(s)",
+                    ctx.num_devices()
+                );
             }
             Err(e) => {
-                println!("No GPUs available: {}", e);
+                println!("No GPUs available: {e}");
             }
         }
     }
@@ -1296,7 +1318,7 @@ mod tests {
                 assert_eq!(partitions[0].end_idx(), 1100);
             }
             Err(e) => {
-                println!("No GPU available for partition test: {}", e);
+                println!("No GPU available for partition test: {e}");
             }
         }
     }
@@ -1310,7 +1332,7 @@ mod tests {
                 assert_eq!(ctx.worker(0).unwrap().device_id(), 0);
             }
             Err(e) => {
-                println!("Device 0 not available: {}", e);
+                println!("Device 0 not available: {e}");
             }
         }
     }
@@ -1323,7 +1345,7 @@ mod tests {
                 assert_eq!(worker.device_id(), 0);
             }
             Err(e) => {
-                println!("Failed to create worker for device 0: {}", e);
+                println!("Failed to create worker for device 0: {e}");
             }
         }
     }
@@ -1358,15 +1380,15 @@ mod tests {
                         assert_eq!(lines[2], "ba");
                         assert_eq!(lines[3], "bb");
 
-                        println!("Multi-GPU generation successful: {:?}", lines);
+                        println!("Multi-GPU generation successful: {lines:?}");
                     }
                     Err(e) => {
-                        println!("Generation failed: {}", e);
+                        println!("Generation failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("No GPU available for generation test: {}", e);
+                println!("No GPU available for generation test: {e}");
             }
         }
     }
@@ -1394,15 +1416,15 @@ mod tests {
                         assert_eq!(lines[1], "bb");
                         assert_eq!(lines[2], "bc");
 
-                        println!("Partial keyspace generation successful: {:?}", lines);
+                        println!("Partial keyspace generation successful: {lines:?}");
                     }
                     Err(e) => {
-                        println!("Partial generation failed: {}", e);
+                        println!("Partial generation failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("No GPU available for partial generation test: {}", e);
+                println!("No GPU available for partial generation test: {e}");
             }
         }
     }
@@ -1414,8 +1436,7 @@ mod tests {
             Ok(ctx) => {
                 assert!(ctx.num_devices() >= 1);
             }
-            Err(_e) => {
-            }
+            Err(_e) => {}
         }
     }
 
@@ -1432,20 +1453,21 @@ mod tests {
 
                 // Run 3 times like the benchmark does
                 for i in 1..=3 {
-                    match ctx.generate_batch(&charsets, &mask, 0, 10_000_000, 2) { // 10M words, PACKED
+                    match ctx.generate_batch(&charsets, &mask, 0, 10_000_000, 2) {
+                        // 10M words, PACKED
                         Ok(output) => {
                             assert_eq!(output.len(), 100_000_000); // 10M * 10 chars
-                            println!("Run {}: Success!", i);
+                            println!("Run {i}: Success!");
                         }
                         Err(e) => {
-                            panic!("Run {} failed: {}", i, e);
+                            panic!("Run {i} failed: {e}");
                         }
                     }
                 }
                 println!("All 3 runs successful!");
             }
             Err(e) => {
-                println!("No GPU available for async repeated test: {}", e);
+                println!("No GPU available for async repeated test: {e}");
             }
         }
     }
@@ -1462,19 +1484,20 @@ mod tests {
                 let mask = vec![0, 0, 0, 0, 1, 1]; // ?l?l?l?l?d?d - 6 chars
 
                 // Generate 1M words
-                match ctx.generate_batch(&charsets, &mask, 0, 1_000_000, 2) { // PACKED format
+                match ctx.generate_batch(&charsets, &mask, 0, 1_000_000, 2) {
+                    // PACKED format
                     Ok(output) => {
                         // Verify we got correct output size
                         assert_eq!(output.len(), 6_000_000); // 1M words * 6 chars each
                         println!("Async large batch (1M words) successful!");
                     }
                     Err(e) => {
-                        panic!("Large batch generation failed: {}", e);
+                        panic!("Large batch generation failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("No GPU available for async large test: {}", e);
+                println!("No GPU available for async large test: {e}");
             }
         }
     }
@@ -1490,19 +1513,20 @@ mod tests {
                 let mask = vec![1, 1, 1]; // 10^3 = 1000 words
 
                 // Generate 1000 words
-                match ctx.generate_batch(&charsets, &mask, 0, 1000, 2) { // PACKED format
+                match ctx.generate_batch(&charsets, &mask, 0, 1000, 2) {
+                    // PACKED format
                     Ok(output) => {
                         // Verify we got correct output size
                         assert_eq!(output.len(), 3000); // 1000 words * 3 chars each
                         println!("Async medium batch (1000 words) successful!");
                     }
                     Err(e) => {
-                        panic!("Medium batch generation failed: {}", e);
+                        panic!("Medium batch generation failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("No GPU available for async medium test: {}", e);
+                println!("No GPU available for async medium test: {e}");
             }
         }
     }
@@ -1536,15 +1560,15 @@ mod tests {
                         assert_eq!(lines[2], "ba");
                         assert_eq!(lines[3], "bb");
 
-                        println!("Async multi-GPU generation successful: {:?}", lines);
+                        println!("Async multi-GPU generation successful: {lines:?}");
                     }
                     Err(e) => {
-                        panic!("Async generation failed: {}", e);
+                        panic!("Async generation failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("No GPU available for async test: {}", e);
+                println!("No GPU available for async test: {e}");
             }
         }
     }
@@ -1576,7 +1600,7 @@ mod tests {
 
         // Record 3 samples
         stats.record_completion(Duration::from_secs(1), 1_000_000); // 1M/s
-        stats.record_completion(Duration::from_secs(1), 900_000);   // 0.9M/s
+        stats.record_completion(Duration::from_secs(1), 900_000); // 0.9M/s
         stats.record_completion(Duration::from_secs(1), 1_100_000); // 1.1M/s
 
         assert_eq!(stats.sample_count, 3);
@@ -1642,10 +1666,20 @@ mod tests {
 
                 // Allow 1% tolerance for rounding
                 let tolerance = 8_000_000; // 1% of 800M
-                assert!((partitions[0].count as i64 - gpu0_expected as i64).abs() < tolerance as i64,
-                    "GPU 0 got {} words, expected {} ± {}", partitions[0].count, gpu0_expected, tolerance);
-                assert!((partitions[1].count as i64 - gpu1_expected as i64).abs() < tolerance as i64,
-                    "GPU 1 got {} words, expected {} ± {}", partitions[1].count, gpu1_expected, tolerance);
+                assert!(
+                    (partitions[0].count as i64 - gpu0_expected as i64).abs() < tolerance as i64,
+                    "GPU 0 got {} words, expected {} ± {}",
+                    partitions[0].count,
+                    gpu0_expected,
+                    tolerance
+                );
+                assert!(
+                    (partitions[1].count as i64 - gpu1_expected as i64).abs() < tolerance as i64,
+                    "GPU 1 got {} words, expected {} ± {}",
+                    partitions[1].count,
+                    gpu1_expected,
+                    tolerance
+                );
 
                 // Verify total coverage
                 let total: u64 = partitions.iter().map(|p| p.count).sum();
@@ -1656,7 +1690,7 @@ mod tests {
                 assert_eq!(partitions[1].start_idx, partitions[0].count);
             }
             Err(e) => {
-                println!("No GPU available for adaptive partition test: {}", e);
+                println!("No GPU available for adaptive partition test: {e}");
             }
         }
     }
@@ -1688,8 +1722,13 @@ mod tests {
                 // Each GPU should get ~400M words (1/3 of total)
                 for (i, partition) in partitions.iter().enumerate() {
                     let tolerance = 12_000_000; // 1% tolerance
-                    assert!((partition.count as i64 - 400_000_000i64).abs() < tolerance as i64,
-                        "GPU {} got {} words, expected 400M ± {}", i, partition.count, tolerance);
+                    assert!(
+                        (partition.count as i64 - 400_000_000i64).abs() < tolerance as i64,
+                        "GPU {} got {} words, expected 400M ± {}",
+                        i,
+                        partition.count,
+                        tolerance
+                    );
                 }
 
                 // Verify total
@@ -1697,7 +1736,7 @@ mod tests {
                 assert_eq!(total, 1_200_000_000);
             }
             Err(e) => {
-                println!("No GPU available for balanced partition test: {}", e);
+                println!("No GPU available for balanced partition test: {e}");
             }
         }
     }
@@ -1727,7 +1766,7 @@ mod tests {
                 assert_eq!(partitions[1].count, 500_000);
             }
             Err(e) => {
-                println!("No GPU available for fallback test: {}", e);
+                println!("No GPU available for fallback test: {e}");
             }
         }
     }

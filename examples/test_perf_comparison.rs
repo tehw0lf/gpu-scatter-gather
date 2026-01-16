@@ -7,20 +7,20 @@ use std::time::Instant;
 fn main() -> Result<()> {
     println!("🔍 Performance Comparison: Direct GPU vs Multi-GPU API");
     println!("{}", "=".repeat(80));
-    
+
     let lowercase = b"abcdefghijklmnopqrstuvwxyz".to_vec();
     let digits = b"0123456789".to_vec();
-    
+
     let mut charsets = HashMap::new();
     charsets.insert(0, lowercase);
     charsets.insert(1, digits);
-    
+
     let mask = vec![0, 0, 0, 0, 0, 0, 1, 1, 1, 1]; // 10 chars
     let batch_size = 100_000_000u64;
-    
+
     println!("\n📊 Test: 100M words, 10-char pattern (?l?l?l?l?l?l?d?d?d?d)");
     println!("{}", "=".repeat(80));
-    
+
     // Test 1: Direct GPU context
     println!("\n🔷 Test 1: Direct GpuContext API");
     let (duration1, throughput1, output_len1) = {
@@ -32,8 +32,8 @@ fn main() -> Result<()> {
         (duration1, throughput1, output1.len())
     }; // gpu is dropped here
     println!("   Time: {:.4}s", duration1.as_secs_f64());
-    println!("   Throughput: {:.2} M words/s", throughput1);
-    println!("   Output size: {} bytes", output_len1);
+    println!("   Throughput: {throughput1:.2} M words/s");
+    println!("   Output size: {output_len1} bytes");
 
     // Test 2: Multi-GPU sync (1 device)
     println!("\n🔷 Test 2: MultiGpuContext::new() (sync, 1 GPU)");
@@ -46,8 +46,8 @@ fn main() -> Result<()> {
         (duration2, throughput2, output2.len())
     }; // ctx_sync is dropped here
     println!("   Time: {:.4}s", duration2.as_secs_f64());
-    println!("   Throughput: {:.2} M words/s", throughput2);
-    println!("   Output size: {} bytes", output_len2);
+    println!("   Throughput: {throughput2:.2} M words/s");
+    println!("   Output size: {output_len2} bytes");
 
     // Test 3: Multi-GPU async (1 device)
     println!("\n🔷 Test 3: MultiGpuContext::new_async() (async, 1 GPU)");
@@ -60,21 +60,31 @@ fn main() -> Result<()> {
         (duration3, throughput3, output3.len())
     }; // ctx_async is dropped here
     println!("   Time: {:.4}s", duration3.as_secs_f64());
-    println!("   Throughput: {:.2} M words/s", throughput3);
-    println!("   Output size: {} bytes", output_len3);
-    
+    println!("   Throughput: {throughput3:.2} M words/s");
+    println!("   Output size: {output_len3} bytes");
+
     println!("\n{}", "=".repeat(80));
     println!("📊 ANALYSIS");
     println!("{}", "=".repeat(80));
-    
-    let overhead_sync = ((duration2.as_secs_f64() - duration1.as_secs_f64()) / duration1.as_secs_f64()) * 100.0;
-    let overhead_async = ((duration3.as_secs_f64() - duration1.as_secs_f64()) / duration1.as_secs_f64()) * 100.0;
-    
-    println!("\nDirect GPU:       {:.2} M words/s (baseline)", throughput1);
-    println!("Multi-GPU sync:   {:.2} M words/s ({:+.1}% overhead)", throughput2, overhead_sync);
-    println!("Multi-GPU async:  {:.2} M words/s ({:+.1}% overhead)", throughput3, overhead_async);
-    
-    println!("\n❌ PROBLEM: Multi-GPU API should have <5% overhead, but has {:.1}%!", overhead_sync);
-    
+
+    let overhead_sync =
+        ((duration2.as_secs_f64() - duration1.as_secs_f64()) / duration1.as_secs_f64()) * 100.0;
+    let overhead_async =
+        ((duration3.as_secs_f64() - duration1.as_secs_f64()) / duration1.as_secs_f64()) * 100.0;
+
+    println!(
+        "\nDirect GPU:       {throughput1:.2} M words/s (baseline)"
+    );
+    println!(
+        "Multi-GPU sync:   {throughput2:.2} M words/s ({overhead_sync:+.1}% overhead)"
+    );
+    println!(
+        "Multi-GPU async:  {throughput3:.2} M words/s ({overhead_async:+.1}% overhead)"
+    );
+
+    println!(
+        "\n❌ PROBLEM: Multi-GPU API should have <5% overhead, but has {overhead_sync:.1}%!"
+    );
+
     Ok(())
 }

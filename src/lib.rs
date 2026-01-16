@@ -100,7 +100,7 @@ impl WordlistGeneratorBuilder {
         // Validate that all charset IDs in mask exist
         for &charset_id in &mask {
             if !self.charsets.contains_key(&charset_id) {
-                anyhow::bail!("Mask references undefined charset ID: {}", charset_id);
+                anyhow::bail!("Mask references undefined charset ID: {charset_id}");
             }
         }
 

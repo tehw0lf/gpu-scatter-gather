@@ -35,7 +35,7 @@ fn main() -> Result<()> {
         anyhow::bail!("No CUDA devices found");
     }
 
-    println!("CUDA Devices Found: {}", device_count);
+    println!("CUDA Devices Found: {device_count}");
     println!();
 
     // Print device information
@@ -43,7 +43,9 @@ fn main() -> Result<()> {
         let gpu = GpuContext::with_device(device_id)?;
         let device_name = gpu.device_name()?;
         let (major, minor) = gpu.compute_capability();
-        println!("  Device {}: {} (sm_{}{})", device_id, device_name, major, minor);
+        println!(
+            "  Device {device_id}: {device_name} (sm_{major}{minor})"
+        );
     }
     println!();
 
@@ -53,7 +55,7 @@ fn main() -> Result<()> {
 
     let mut charsets = HashMap::new();
     charsets.insert(0, lowercase); // ?l
-    charsets.insert(1, digits);     // ?d
+    charsets.insert(1, digits); // ?d
 
     // Test configuration: 10-char password (realistic use case)
     let mask = vec![0, 0, 0, 0, 0, 0, 1, 1, 1, 1]; // ?l?l?l?l?l?l?d?d?d?d
@@ -62,22 +64,25 @@ fn main() -> Result<()> {
 
     // Batch sizes to test
     let batch_sizes = vec![
-        10_000_000u64,   // 10M
-        50_000_000u64,   // 50M
-        100_000_000u64,  // 100M
+        10_000_000u64,  // 10M
+        50_000_000u64,  // 50M
+        100_000_000u64, // 100M
     ];
 
     println!("{}", "=".repeat(80));
     println!("BENCHMARK CONFIGURATION");
     println!("{}", "=".repeat(80));
-    println!("Pattern: {} ({}-char passwords)", pattern, word_length);
+    println!("Pattern: {pattern} ({word_length}-char passwords)");
     println!("Output Format: PACKED (no separators - optimal bandwidth)");
     println!("Iterations: 3 (average of best 2 to reduce noise)");
     println!();
 
     for &batch_size in &batch_sizes {
         println!("{}", "=".repeat(80));
-        println!("📊 Batch Size: {} words ({:.2e})", batch_size, batch_size as f64);
+        println!(
+            "📊 Batch Size: {} words ({:.2e})",
+            batch_size, batch_size as f64
+        );
         println!("{}", "=".repeat(80));
         println!();
 
@@ -94,7 +99,12 @@ fn main() -> Result<()> {
             let (duration, words) = run_sync_benchmark(&charsets, &mask, batch_size)?;
             let throughput = words as f64 / duration.as_secs_f64() / 1_000_000.0;
             sync_times.push(duration);
-            println!("    Run {}: {:.2} M words/s ({:.3}s)", i, throughput, duration.as_secs_f64());
+            println!(
+                "    Run {}: {:.2} M words/s ({:.3}s)",
+                i,
+                throughput,
+                duration.as_secs_f64()
+            );
         }
 
         // Average best 2
@@ -102,7 +112,7 @@ fn main() -> Result<()> {
         let avg_sync_time = (sync_times[0] + sync_times[1]).as_secs_f64() / 2.0;
         let sync_throughput = batch_size as f64 / avg_sync_time / 1_000_000.0;
         println!();
-        println!("    ⚡ SYNC Average: {:.2} M words/s", sync_throughput);
+        println!("    ⚡ SYNC Average: {sync_throughput:.2} M words/s");
         println!();
 
         // Test 2: Asynchronous with pinned memory (v1.2.0)
@@ -112,7 +122,12 @@ fn main() -> Result<()> {
             let (duration, words) = run_async_benchmark(&charsets, &mask, batch_size)?;
             let throughput = words as f64 / duration.as_secs_f64() / 1_000_000.0;
             async_times.push(duration);
-            println!("    Run {}: {:.2} M words/s ({:.3}s)", i, throughput, duration.as_secs_f64());
+            println!(
+                "    Run {}: {:.2} M words/s ({:.3}s)",
+                i,
+                throughput,
+                duration.as_secs_f64()
+            );
         }
 
         // Average best 2
@@ -120,7 +135,7 @@ fn main() -> Result<()> {
         let avg_async_time = (async_times[0] + async_times[1]).as_secs_f64() / 2.0;
         let async_throughput = batch_size as f64 / avg_async_time / 1_000_000.0;
         println!();
-        println!("    ⚡ ASYNC Average: {:.2} M words/s", async_throughput);
+        println!("    ⚡ ASYNC Average: {async_throughput:.2} M words/s");
         println!();
 
         // Calculate improvement
@@ -129,13 +144,15 @@ fn main() -> Result<()> {
 
         println!("  📊 RESULTS");
         println!("  {}", "-".repeat(76));
-        println!("    SYNC (baseline):  {:.2} M words/s", sync_throughput);
-        println!("    ASYNC (optimized): {:.2} M words/s", async_throughput);
+        println!("    SYNC (baseline):  {sync_throughput:.2} M words/s");
+        println!("    ASYNC (optimized): {async_throughput:.2} M words/s");
         println!("  {}", "-".repeat(76));
         if improvement > 0.0 {
-            println!("    ✅ Improvement: +{:.1}% ({:.2}× speedup)", improvement, speedup);
+            println!(
+                "    ✅ Improvement: +{improvement:.1}% ({speedup:.2}× speedup)"
+            );
         } else {
-            println!("    ⚠️  Regression: {:.1}%", improvement);
+            println!("    ⚠️  Regression: {improvement:.1}%");
         }
         println!();
     }
@@ -147,7 +164,11 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_sync_benchmark(charsets: &HashMap<usize, Vec<u8>>, mask: &[usize], batch_size: u64) -> Result<(std::time::Duration, u64)> {
+fn run_sync_benchmark(
+    charsets: &HashMap<usize, Vec<u8>>,
+    mask: &[usize],
+    batch_size: u64,
+) -> Result<(std::time::Duration, u64)> {
     // Create sync multi-GPU context
     let mut ctx = MultiGpuContext::new()?;
 
@@ -161,7 +182,11 @@ fn run_sync_benchmark(charsets: &HashMap<usize, Vec<u8>>, mask: &[usize], batch_
     Ok((duration, words_generated as u64))
 }
 
-fn run_async_benchmark(charsets: &HashMap<usize, Vec<u8>>, mask: &[usize], batch_size: u64) -> Result<(std::time::Duration, u64)> {
+fn run_async_benchmark(
+    charsets: &HashMap<usize, Vec<u8>>,
+    mask: &[usize],
+    batch_size: u64,
+) -> Result<(std::time::Duration, u64)> {
     // Create async multi-GPU context (with pinned memory + streams)
     let mut ctx = MultiGpuContext::new_async()?;
 

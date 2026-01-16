@@ -67,7 +67,10 @@ fn main() -> Result<()> {
             .init();
     }
 
-    log::info!("GPU Scatter-Gather Wordlist Generator v{}", env!("CARGO_PKG_VERSION"));
+    log::info!(
+        "GPU Scatter-Gather Wordlist Generator v{}",
+        env!("CARGO_PKG_VERSION")
+    );
 
     // Build charset map
     let mut builder = WordlistGenerator::builder();
@@ -110,11 +113,11 @@ fn main() -> Result<()> {
     // Show keyspace if requested
     let keyspace_size = generator.keyspace_size();
     if args.keyspace {
-        println!("Keyspace size: {}", keyspace_size);
+        println!("Keyspace size: {keyspace_size}");
         return Ok(());
     }
 
-    log::info!("Generating {} words...", keyspace_size);
+    log::info!("Generating {keyspace_size} words...");
     log::info!("Mask: {}", args.mask);
 
     // Generate wordlist to stdout (CPU reference implementation for now)

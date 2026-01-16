@@ -53,7 +53,7 @@ impl BenchmarkPattern {
                 mask_description: "?l?l?l?l?l?l?l?l".to_string(),
                 charsets: HashMap::from([(0, "abcdefghijklmnopqrstuvwxyz".to_string())]),
                 mask: vec![0, 0, 0, 0, 0, 0, 0, 0],
-                total_keyspace: 208_827_064_576, // 26^8
+                total_keyspace: 208_827_064_576,            // 26^8
                 max_words_to_generate: Some(1_000_000_000), // Only generate 1B words
             },
             // Pattern 4: Mixed Charsets
@@ -63,7 +63,7 @@ impl BenchmarkPattern {
                 charsets: HashMap::from([
                     (0, "ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_string()), // uppercase
                     (1, "abcdefghijklmnopqrstuvwxyz".to_string()), // lowercase
-                    (2, "0123456789".to_string()),                  // digits
+                    (2, "0123456789".to_string()),                 // digits
                 ]),
                 mask: vec![0, 1, 2, 2, 2, 2, 2, 2],
                 total_keyspace: 676_000_000, // 26 * 26 * 10^6
@@ -74,7 +74,7 @@ impl BenchmarkPattern {
                 name: "special_chars".to_string(),
                 mask_description: "?l?l?s?s?s?s".to_string(),
                 charsets: HashMap::from([
-                    (0, "abcdefghijklmnopqrstuvwxyz".to_string()),     // lowercase
+                    (0, "abcdefghijklmnopqrstuvwxyz".to_string()), // lowercase
                     (1, " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~".to_string()), // special (33 chars)
                 ]),
                 mask: vec![0, 0, 1, 1, 1, 1],
@@ -109,7 +109,7 @@ unsafe fn run_single_benchmark(
     check_cuda(cuEventCreate(&mut end_event, 0))?;
 
     // Warm GPU (single small batch)
-    let _ = gpu.generate_batch(&charsets, &pattern.mask, 0, 1000, 0)?;  // format=0 (newlines)
+    let _ = gpu.generate_batch(&charsets, &pattern.mask, 0, 1000, 0)?; // format=0 (newlines)
 
     // Record start time
     check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
@@ -123,7 +123,7 @@ unsafe fn run_single_benchmark(
         let remaining = words_to_generate - total_words;
         let batch = batch_size.min(remaining);
 
-        let _output = gpu.generate_batch(&charsets, &pattern.mask, current_index, batch, 0)?;  // format=0 (newlines)
+        let _output = gpu.generate_batch(&charsets, &pattern.mask, current_index, batch, 0)?; // format=0 (newlines)
 
         total_words += batch;
         current_index += batch;
@@ -159,8 +159,8 @@ pub fn run_baseline_suite() -> Result<HashMap<String, StatisticalSummary>> {
     let (major, minor) = gpu.compute_capability();
 
     println!("\n=== GPU Scatter-Gather Baseline Benchmarks ===");
-    println!("GPU: {}", device_name);
-    println!("Compute Capability: {}.{}", major, minor);
+    println!("GPU: {device_name}");
+    println!("Compute Capability: {major}.{minor}");
     println!();
 
     let patterns = BenchmarkPattern::standard_patterns();
@@ -171,7 +171,7 @@ pub fn run_baseline_suite() -> Result<HashMap<String, StatisticalSummary>> {
         println!("Mask: {}", pattern.mask_description);
         println!("Keyspace: {}", pattern.total_keyspace);
         if let Some(limit) = pattern.max_words_to_generate {
-            println!("Generating: {} words (limited)", limit);
+            println!("Generating: {limit} words (limited)");
         }
 
         // Warm-up runs
@@ -202,14 +202,8 @@ pub fn run_baseline_suite() -> Result<HashMap<String, StatisticalSummary>> {
         let summary = StatisticalSummary::from_runs(&runs);
 
         println!("\n--- Statistics ---");
-        println!(
-            "Mean:     {:.2}M words/s",
-            summary.mean_throughput / 1e6
-        );
-        println!(
-            "Median:   {:.2}M words/s",
-            summary.median_throughput / 1e6
-        );
+        println!("Mean:     {:.2}M words/s", summary.mean_throughput / 1e6);
+        println!("Median:   {:.2}M words/s", summary.median_throughput / 1e6);
         println!("Std Dev:  {:.2}M words/s", summary.std_dev / 1e6);
         println!("CV:       {:.2}%", summary.coefficient_of_variation * 100.0);
         println!(
@@ -240,13 +234,10 @@ pub fn run_baseline_suite() -> Result<HashMap<String, StatisticalSummary>> {
 }
 
 /// Save results to JSON file
-pub fn save_results(
-    results: &HashMap<String, StatisticalSummary>,
-    filename: &str,
-) -> Result<()> {
+pub fn save_results(results: &HashMap<String, StatisticalSummary>, filename: &str) -> Result<()> {
     let json = serde_json::to_string_pretty(results)?;
     std::fs::write(filename, json)?;
-    println!("\n✅ Results saved to: {}", filename);
+    println!("\n✅ Results saved to: {filename}");
     Ok(())
 }
 
@@ -263,7 +254,7 @@ pub fn generate_report(
         "**Date:** {}\n",
         Local::now().format("%Y-%m-%d %H:%M:%S")
     ));
-    report.push_str(&format!("**GPU:** {}\n", gpu_info));
+    report.push_str(&format!("**GPU:** {gpu_info}\n"));
     report.push_str("\n---\n\n");
 
     report.push_str("## Summary Table\n\n");
@@ -286,7 +277,7 @@ pub fn generate_report(
     report.push_str("\n## Detailed Results\n\n");
 
     for (name, summary) in results {
-        report.push_str(&format!("### {}\n\n", name));
+        report.push_str(&format!("### {name}\n\n"));
         report.push_str(&format!(
             "- **Mean Throughput:** {:.2}M words/s\n",
             summary.mean_throughput / 1e6
@@ -329,11 +320,11 @@ pub fn generate_report(
             ));
         }
 
-        report.push_str("\n");
+        report.push('\n');
     }
 
     std::fs::write(filename, report)?;
-    println!("✅ Report saved to: {}", filename);
+    println!("✅ Report saved to: {filename}");
     Ok(())
 }
 
@@ -347,9 +338,9 @@ unsafe fn check_cuda(result: CUresult) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         } else {
-            format!("CUDA error code: {:?}", result)
+            format!("CUDA error code: {result:?}")
         };
-        anyhow::bail!("CUDA error: {}", error_msg);
+        anyhow::bail!("CUDA error: {error_msg}");
     }
     Ok(())
 }
@@ -361,7 +352,7 @@ fn main() -> Result<()> {
     let gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
-    let gpu_info = format!("{} (Compute Capability {}.{})", device_name, major, minor);
+    let gpu_info = format!("{device_name} (Compute Capability {major}.{minor})");
     drop(gpu); // Drop before running suite
 
     // Run benchmark suite
@@ -374,11 +365,11 @@ fn main() -> Result<()> {
 
     save_results(
         &results,
-        &format!("{}/baseline_{}.json", results_dir, timestamp),
+        &format!("{results_dir}/baseline_{timestamp}.json"),
     )?;
     generate_report(
         &results,
-        &format!("{}/baseline_report_{}.md", results_dir, timestamp),
+        &format!("{results_dir}/baseline_report_{timestamp}.md"),
         &gpu_info,
     )?;
 

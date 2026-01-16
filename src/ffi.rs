@@ -4,12 +4,12 @@
 //!
 //! Safety: All functions validate inputs and never panic across FFI boundary.
 
-use std::os::raw::c_char;
-use std::collections::HashMap;
-use std::cell::RefCell;
 use crate::gpu::GpuContext;
 use crate::multigpu::MultiGpuContext;
 use cuda_driver_sys::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::os::raw::c_char;
 
 // Error codes (matching C API specification)
 pub const WG_SUCCESS: i32 = 0;
@@ -22,9 +22,9 @@ pub const WG_ERROR_BUFFER_TOO_SMALL: i32 = -6;
 pub const WG_ERROR_KEYSPACE_OVERFLOW: i32 = -7;
 
 // Output format modes
-pub const WG_FORMAT_NEWLINES: i32 = 0;  // Default: "word\n"
-pub const WG_FORMAT_FIXED_WIDTH: i32 = 1;  // Future: fixed width padding
-pub const WG_FORMAT_PACKED: i32 = 2;  // Future: no separators
+pub const WG_FORMAT_NEWLINES: i32 = 0; // Default: "word\n"
+pub const WG_FORMAT_FIXED_WIDTH: i32 = 1; // Future: fixed width padding
+pub const WG_FORMAT_PACKED: i32 = 2; // Future: no separators
 
 /// Opaque handle to wordlist generator (exported to C)
 #[repr(C)]
@@ -63,10 +63,10 @@ struct GeneratorInternal {
     gpu: GpuContext,
     charsets: HashMap<usize, Vec<u8>>,
     mask: Option<Vec<usize>>,
-    current_batch: Option<CUdeviceptr>,  // Track active device memory
+    current_batch: Option<CUdeviceptr>, // Track active device memory
     #[allow(dead_code)]
-    owns_context: bool,  // Whether we created the CUDA context (kept for future use)
-    output_format: i32,  // Output format mode (WG_FORMAT_*)
+    owns_context: bool, // Whether we created the CUDA context (kept for future use)
+    output_format: i32,                 // Output format mode (WG_FORMAT_*)
 }
 
 /// Internal multi-GPU generator state (not exposed to C)
@@ -97,7 +97,7 @@ impl Drop for GeneratorInternal {
 
 // Thread-local error storage
 thread_local! {
-    static LAST_ERROR: RefCell<Option<String>> = RefCell::new(None);
+    static LAST_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 fn set_error(msg: String) {
@@ -107,9 +107,7 @@ fn set_error(msg: String) {
 }
 
 /// Helper: Convert opaque handle to internal reference
-unsafe fn handle_to_internal<'a>(
-    gen: *mut WordlistGenerator
-) -> Option<&'a mut GeneratorInternal> {
+unsafe fn handle_to_internal<'a>(gen: *mut WordlistGenerator) -> Option<&'a mut GeneratorInternal> {
     if gen.is_null() {
         return None;
     }
@@ -127,7 +125,7 @@ unsafe fn handle_to_internal<'a>(
 #[no_mangle]
 pub extern "C" fn wg_create(
     ctx: *mut std::ffi::c_void,
-    _device_id: i32,  // TODO: Support device selection when ctx is NULL
+    _device_id: i32, // TODO: Support device selection when ctx is NULL
 ) -> *mut WordlistGenerator {
     // Catch any panics and return NULL
     let result = std::panic::catch_unwind(|| {
@@ -136,7 +134,7 @@ pub extern "C" fn wg_create(
             match GpuContext::new() {
                 Ok(g) => (g, true),
                 Err(e) => {
-                    set_error(format!("Failed to create GPU context: {}", e));
+                    set_error(format!("Failed to create GPU context: {e}"));
                     return std::ptr::null_mut();
                 }
             }
@@ -147,7 +145,7 @@ pub extern "C" fn wg_create(
             match GpuContext::new() {
                 Ok(g) => (g, true),
                 Err(e) => {
-                    set_error(format!("Failed to create GPU context: {}", e));
+                    set_error(format!("Failed to create GPU context: {e}"));
                     return std::ptr::null_mut();
                 }
             }
@@ -160,7 +158,7 @@ pub extern "C" fn wg_create(
             mask: None,
             current_batch: None,
             owns_context,
-            output_format: WG_FORMAT_NEWLINES,  // Default format
+            output_format: WG_FORMAT_NEWLINES, // Default format
         });
 
         // Convert to opaque pointer
@@ -219,7 +217,7 @@ pub extern "C" fn wg_set_charset(
 
     // Validate charset_id
     if charset_id <= 0 || charset_id > 255 {
-        set_error(format!("Invalid charset_id: {}", charset_id));
+        set_error(format!("Invalid charset_id: {charset_id}"));
         return WG_ERROR_INVALID_PARAM;
     }
 
@@ -231,14 +229,12 @@ pub extern "C" fn wg_set_charset(
 
     // Validate length
     if len == 0 || len > 512 {
-        set_error(format!("Invalid charset length: {}", len));
+        set_error(format!("Invalid charset length: {len}"));
         return WG_ERROR_INVALID_PARAM;
     }
 
     // Convert C string to Rust Vec<u8>
-    let charset_bytes = unsafe {
-        std::slice::from_raw_parts(chars as *const u8, len)
-    }.to_vec();
+    let charset_bytes = unsafe { std::slice::from_raw_parts(chars as *const u8, len) }.to_vec();
 
     // Store charset
     internal.charsets.insert(charset_id as usize, charset_bytes);
@@ -256,11 +252,7 @@ pub extern "C" fn wg_set_charset(
 /// # Returns
 /// WG_SUCCESS or error code
 #[no_mangle]
-pub extern "C" fn wg_set_mask(
-    gen: *mut WordlistGenerator,
-    mask: *const i32,
-    length: i32,
-) -> i32 {
+pub extern "C" fn wg_set_mask(gen: *mut WordlistGenerator, mask: *const i32, length: i32) -> i32 {
     let internal = unsafe {
         match handle_to_internal(gen) {
             Some(g) => g,
@@ -277,19 +269,20 @@ pub extern "C" fn wg_set_mask(
     }
 
     if length <= 0 || length > 32 {
-        set_error(format!("Invalid mask length: {}", length));
+        set_error(format!("Invalid mask length: {length}"));
         return WG_ERROR_INVALID_PARAM;
     }
 
     // Convert C array to Rust Vec
-    let mask_vec = unsafe {
-        std::slice::from_raw_parts(mask, length as usize)
-    }.iter().map(|&x| x as usize).collect::<Vec<_>>();
+    let mask_vec = unsafe { std::slice::from_raw_parts(mask, length as usize) }
+        .iter()
+        .map(|&x| x as usize)
+        .collect::<Vec<_>>();
 
     // Validate all charset IDs exist
     for &charset_id in &mask_vec {
         if !internal.charsets.contains_key(&charset_id) {
-            set_error(format!("Undefined charset ID in mask: {}", charset_id));
+            set_error(format!("Undefined charset ID in mask: {charset_id}"));
             return WG_ERROR_INVALID_PARAM;
         }
     }
@@ -308,10 +301,7 @@ pub extern "C" fn wg_set_mask(
 /// # Returns
 /// WG_SUCCESS or error code
 #[no_mangle]
-pub extern "C" fn wg_set_format(
-    gen: *mut WordlistGenerator,
-    format: i32,
-) -> i32 {
+pub extern "C" fn wg_set_format(gen: *mut WordlistGenerator, format: i32) -> i32 {
     let internal = unsafe {
         match handle_to_internal(gen) {
             Some(g) => g,
@@ -323,8 +313,8 @@ pub extern "C" fn wg_set_format(
     };
 
     // Validate format
-    if format < WG_FORMAT_NEWLINES || format > WG_FORMAT_PACKED {
-        set_error(format!("Invalid format: {}", format));
+    if !(WG_FORMAT_NEWLINES..=WG_FORMAT_PACKED).contains(&format) {
+        set_error(format!("Invalid format: {format}"));
         return WG_ERROR_INVALID_PARAM;
     }
 
@@ -373,10 +363,7 @@ pub extern "C" fn wg_keyspace_size(gen: *mut WordlistGenerator) -> u64 {
 /// # Returns
 /// Required buffer size in bytes, or 0 on error
 #[no_mangle]
-pub extern "C" fn wg_calculate_buffer_size(
-    gen: *mut WordlistGenerator,
-    count: u64,
-) -> usize {
+pub extern "C" fn wg_calculate_buffer_size(gen: *mut WordlistGenerator, count: u64) -> usize {
     let internal = unsafe {
         match handle_to_internal(gen) {
             Some(g) => g,
@@ -393,10 +380,10 @@ pub extern "C" fn wg_calculate_buffer_size(
 
     // Calculate bytes per word based on format
     let bytes_per_word = match internal.output_format {
-        WG_FORMAT_NEWLINES => word_length + 1,  // word + '\n'
-        WG_FORMAT_FIXED_WIDTH => word_length + 1,  // word + '\0' padding
-        WG_FORMAT_PACKED => word_length,  // just the word, no separator
-        _ => word_length + 1,  // fallback to newlines
+        WG_FORMAT_NEWLINES => word_length + 1,    // word + '\n'
+        WG_FORMAT_FIXED_WIDTH => word_length + 1, // word + '\0' padding
+        WG_FORMAT_PACKED => word_length,          // just the word, no separator
+        _ => word_length + 1,                     // fallback to newlines
     };
 
     (count as usize).saturating_mul(bytes_per_word)
@@ -408,11 +395,9 @@ pub extern "C" fn wg_calculate_buffer_size(
 /// Error message string, or NULL if no error
 #[no_mangle]
 pub extern "C" fn wg_get_error(_gen: *mut WordlistGenerator) -> *const c_char {
-    LAST_ERROR.with(|e| {
-        match e.borrow().as_ref() {
-            Some(err) => err.as_ptr() as *const c_char,
-            None => std::ptr::null(),
-        }
+    LAST_ERROR.with(|e| match e.borrow().as_ref() {
+        Some(err) => err.as_ptr() as *const c_char,
+        None => std::ptr::null(),
     })
 }
 
@@ -452,8 +437,7 @@ pub extern "C" fn wg_generate_batch_host(
     let required = wg_calculate_buffer_size(gen, count);
     if buffer_size < required {
         set_error(format!(
-            "Buffer too small: need {} bytes, have {}",
-            required, buffer_size
+            "Buffer too small: need {required} bytes, have {buffer_size}"
         ));
         return WG_ERROR_BUFFER_TOO_SMALL as isize;
     }
@@ -474,16 +458,12 @@ pub extern "C" fn wg_generate_batch_host(
         Ok(data) => {
             // Copy to caller's buffer
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    data.as_ptr(),
-                    output_buffer,
-                    data.len()
-                );
+                std::ptr::copy_nonoverlapping(data.as_ptr(), output_buffer, data.len());
             }
             data.len() as isize
         }
         Err(e) => {
-            set_error(format!("Generation failed: {}", e));
+            set_error(format!("Generation failed: {e}"));
             WG_ERROR_CUDA as isize
         }
     }
@@ -556,9 +536,9 @@ pub extern "C" fn wg_generate_batch_device(
             // Note: Kernel always writes with newlines (word_length + 1)
             // For packed format, consumers should use word_length stride and ignore '\n'
             let stride = match internal.output_format {
-                WG_FORMAT_NEWLINES => word_length + 1,  // word + '\n'
-                WG_FORMAT_FIXED_WIDTH => word_length + 1,  // word + '\0' (same as newlines for now)
-                WG_FORMAT_PACKED => word_length,  // just word (skip '\n')
+                WG_FORMAT_NEWLINES => word_length + 1,    // word + '\n'
+                WG_FORMAT_FIXED_WIDTH => word_length + 1, // word + '\0' (same as newlines for now)
+                WG_FORMAT_PACKED => word_length,          // just word (skip '\n')
                 _ => word_length + 1,
             };
 
@@ -574,7 +554,7 @@ pub extern "C" fn wg_generate_batch_device(
             WG_SUCCESS
         }
         Err(e) => {
-            set_error(format!("Device generation failed: {}", e));
+            set_error(format!("Device generation failed: {e}"));
             WG_ERROR_CUDA
         }
     }
@@ -589,10 +569,7 @@ pub extern "C" fn wg_generate_batch_device(
 /// * `gen` - Generator handle
 /// * `batch` - Batch to free (data pointer will be set to 0)
 #[no_mangle]
-pub extern "C" fn wg_free_batch_device(
-    gen: *mut WordlistGenerator,
-    batch: *mut BatchDevice,
-) {
+pub extern "C" fn wg_free_batch_device(gen: *mut WordlistGenerator, batch: *mut BatchDevice) {
     let internal = unsafe {
         match handle_to_internal(gen) {
             Some(g) => g,
@@ -690,15 +667,19 @@ pub extern "C" fn wg_generate_batch_stream(
     let mask = internal.mask.as_ref().unwrap();
     let word_length = mask.len();
 
-    match internal
-        .gpu
-        .generate_batch_device_stream(&internal.charsets, mask, start_idx, count, stream, internal.output_format)
-    {
+    match internal.gpu.generate_batch_device_stream(
+        &internal.charsets,
+        mask,
+        start_idx,
+        count,
+        stream,
+        internal.output_format,
+    ) {
         Ok((device_ptr, buffer_size)) => {
             // Calculate stride based on output format
             let stride = match internal.output_format {
-                WG_FORMAT_PACKED => word_length,        // No separator
-                WG_FORMAT_NEWLINES => word_length + 1,  // word + newline
+                WG_FORMAT_PACKED => word_length,          // No separator
+                WG_FORMAT_NEWLINES => word_length + 1,    // word + newline
                 WG_FORMAT_FIXED_WIDTH => word_length + 1, // word + null/padding
                 _ => word_length + 1,
             };
@@ -719,7 +700,7 @@ pub extern "C" fn wg_generate_batch_stream(
             WG_SUCCESS
         }
         Err(e) => {
-            set_error(format!("GPU generation failed: {}", e));
+            set_error(format!("GPU generation failed: {e}"));
             WG_ERROR_CUDA
         }
     }
@@ -904,24 +885,20 @@ pub extern "C" fn wg_get_device_info(
         // Get device handle
         let mut device = 0;
         if cuDeviceGet(&mut device, device_id) != CUresult::CUDA_SUCCESS {
-            set_error(format!("Failed to get device {}", device_id));
+            set_error(format!("Failed to get device {device_id}"));
             return WG_ERROR_CUDA;
         }
 
         // Get device name
         let mut name_buffer = vec![0i8; 256];
         if cuDeviceGetName(name_buffer.as_mut_ptr(), 256, device) != CUresult::CUDA_SUCCESS {
-            set_error(format!("Failed to get name for device {}", device_id));
+            set_error(format!("Failed to get name for device {device_id}"));
             return WG_ERROR_CUDA;
         }
 
         // Copy name to output buffer
         let name_len = name_buffer.iter().position(|&c| c == 0).unwrap_or(255);
-        std::ptr::copy_nonoverlapping(
-            name_buffer.as_ptr(),
-            name_out,
-            name_len.min(255),
-        );
+        std::ptr::copy_nonoverlapping(name_buffer.as_ptr(), name_out, name_len.min(255));
         *name_out.add(name_len.min(255)) = 0; // Null terminate
 
         // Get compute capability
@@ -934,8 +911,7 @@ pub extern "C" fn wg_get_device_info(
         ) != CUresult::CUDA_SUCCESS
         {
             set_error(format!(
-                "Failed to get compute capability major for device {}",
-                device_id
+                "Failed to get compute capability major for device {device_id}"
             ));
             return WG_ERROR_CUDA;
         }
@@ -947,8 +923,7 @@ pub extern "C" fn wg_get_device_info(
         ) != CUresult::CUDA_SUCCESS
         {
             set_error(format!(
-                "Failed to get compute capability minor for device {}",
-                device_id
+                "Failed to get compute capability minor for device {device_id}"
             ));
             return WG_ERROR_CUDA;
         }
@@ -959,7 +934,9 @@ pub extern "C" fn wg_get_device_info(
         // Get total memory
         let mut total_mem = 0usize;
         if cuDeviceTotalMem_v2(&mut total_mem, device) != CUresult::CUDA_SUCCESS {
-            set_error(format!("Failed to get total memory for device {}", device_id));
+            set_error(format!(
+                "Failed to get total memory for device {device_id}"
+            ));
             return WG_ERROR_CUDA;
         }
 
@@ -975,7 +952,7 @@ pub extern "C" fn wg_get_device_info(
 
 /// Helper: Convert opaque multi-GPU handle to internal reference
 unsafe fn multigpu_handle_to_internal<'a>(
-    gen: *mut MultiGpuGenerator
+    gen: *mut MultiGpuGenerator,
 ) -> Option<&'a mut MultiGpuGeneratorInternal> {
     if gen.is_null() {
         return None;
@@ -993,7 +970,7 @@ pub extern "C" fn wg_multigpu_create() -> *mut MultiGpuGenerator {
         let multi_gpu = match MultiGpuContext::new() {
             Ok(ctx) => ctx,
             Err(e) => {
-                set_error(format!("Failed to create multi-GPU context: {}", e));
+                set_error(format!("Failed to create multi-GPU context: {e}"));
                 return std::ptr::null_mut();
             }
         };
@@ -1033,14 +1010,13 @@ pub extern "C" fn wg_multigpu_create_with_devices(
     }
 
     let result = std::panic::catch_unwind(|| {
-        let device_ids_slice = unsafe {
-            std::slice::from_raw_parts(device_ids, num_devices as usize)
-        };
+        let device_ids_slice =
+            unsafe { std::slice::from_raw_parts(device_ids, num_devices as usize) };
 
         let multi_gpu = match MultiGpuContext::with_devices(device_ids_slice) {
             Ok(ctx) => ctx,
             Err(e) => {
-                set_error(format!("Failed to create multi-GPU context: {}", e));
+                set_error(format!("Failed to create multi-GPU context: {e}"));
                 return std::ptr::null_mut();
             }
         };
@@ -1090,7 +1066,7 @@ pub extern "C" fn wg_multigpu_set_charset(
 
     // Validate charset_id
     if charset_id <= 0 || charset_id > 255 {
-        set_error(format!("Invalid charset_id: {}", charset_id));
+        set_error(format!("Invalid charset_id: {charset_id}"));
         return WG_ERROR_INVALID_PARAM;
     }
 
@@ -1102,14 +1078,12 @@ pub extern "C" fn wg_multigpu_set_charset(
 
     // Validate length
     if len == 0 || len > 512 {
-        set_error(format!("Invalid charset length: {}", len));
+        set_error(format!("Invalid charset length: {len}"));
         return WG_ERROR_INVALID_PARAM;
     }
 
     // Convert C string to Rust Vec<u8>
-    let charset_bytes = unsafe {
-        std::slice::from_raw_parts(chars as *const u8, len)
-    }.to_vec();
+    let charset_bytes = unsafe { std::slice::from_raw_parts(chars as *const u8, len) }.to_vec();
 
     // Store charset
     internal.charsets.insert(charset_id as usize, charset_bytes);
@@ -1148,19 +1122,20 @@ pub extern "C" fn wg_multigpu_set_mask(
     }
 
     if length <= 0 || length > 32 {
-        set_error(format!("Invalid mask length: {}", length));
+        set_error(format!("Invalid mask length: {length}"));
         return WG_ERROR_INVALID_PARAM;
     }
 
     // Convert C array to Rust Vec
-    let mask_vec = unsafe {
-        std::slice::from_raw_parts(mask, length as usize)
-    }.iter().map(|&x| x as usize).collect::<Vec<_>>();
+    let mask_vec = unsafe { std::slice::from_raw_parts(mask, length as usize) }
+        .iter()
+        .map(|&x| x as usize)
+        .collect::<Vec<_>>();
 
     // Validate all charset IDs exist
     for &charset_id in &mask_vec {
         if !internal.charsets.contains_key(&charset_id) {
-            set_error(format!("Undefined charset ID in mask: {}", charset_id));
+            set_error(format!("Undefined charset ID in mask: {charset_id}"));
             return WG_ERROR_INVALID_PARAM;
         }
     }
@@ -1179,10 +1154,7 @@ pub extern "C" fn wg_multigpu_set_mask(
 /// # Returns
 /// WG_SUCCESS or error code
 #[no_mangle]
-pub extern "C" fn wg_multigpu_set_format(
-    gen: *mut MultiGpuGenerator,
-    format: i32,
-) -> i32 {
+pub extern "C" fn wg_multigpu_set_format(gen: *mut MultiGpuGenerator, format: i32) -> i32 {
     let internal = unsafe {
         match multigpu_handle_to_internal(gen) {
             Some(g) => g,
@@ -1194,8 +1166,8 @@ pub extern "C" fn wg_multigpu_set_format(
     };
 
     // Validate format
-    if format < WG_FORMAT_NEWLINES || format > WG_FORMAT_PACKED {
-        set_error(format!("Invalid format: {}", format));
+    if !(WG_FORMAT_NEWLINES..=WG_FORMAT_PACKED).contains(&format) {
+        set_error(format!("Invalid format: {format}"));
         return WG_ERROR_INVALID_PARAM;
     }
 
@@ -1254,8 +1226,7 @@ pub extern "C" fn wg_multigpu_generate(
 
     if buffer_size < required {
         set_error(format!(
-            "Buffer too small: need {} bytes, have {}",
-            required, buffer_size
+            "Buffer too small: need {required} bytes, have {buffer_size}"
         ));
         return WG_ERROR_BUFFER_TOO_SMALL as isize;
     }
@@ -1273,16 +1244,12 @@ pub extern "C" fn wg_multigpu_generate(
         Ok(data) => {
             // Copy to caller's buffer
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    data.as_ptr(),
-                    output_buffer,
-                    data.len()
-                );
+                std::ptr::copy_nonoverlapping(data.as_ptr(), output_buffer, data.len());
             }
             data.len() as isize
         }
         Err(e) => {
-            set_error(format!("Multi-GPU generation failed: {}", e));
+            set_error(format!("Multi-GPU generation failed: {e}"));
             WG_ERROR_CUDA as isize
         }
     }

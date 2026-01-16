@@ -48,13 +48,13 @@ impl Mask {
                         }
                         pattern.push(digit as usize);
                     } else {
-                        bail!("Expected digit after '?', found '{}'", digit_char);
+                        bail!("Expected digit after '?', found '{digit_char}'");
                     }
                 } else {
                     bail!("Unexpected end of string after '?'");
                 }
             } else {
-                bail!("Unexpected character '{}' in mask (expected '?')", ch);
+                bail!("Unexpected character '{ch}' in mask (expected '?')");
             }
         }
 
@@ -87,10 +87,7 @@ impl Mask {
 
     /// Convert back to string representation
     pub fn to_string_representation(&self) -> String {
-        self.pattern
-            .iter()
-            .map(|&id| format!("?{}", id))
-            .collect()
+        self.pattern.iter().map(|&id| format!("?{id}")).collect()
     }
 }
 

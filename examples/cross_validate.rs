@@ -24,9 +24,9 @@ fn main() -> Result<()> {
     let charset1 = "abc";
     let charset2 = "123";
 
-    println!("Test pattern: {}", pattern);
-    println!("  Charset 1 (?1): {}", charset1);
-    println!("  Charset 2 (?2): {}", charset2);
+    println!("Test pattern: {pattern}");
+    println!("  Charset 1 (?1): {charset1}");
+    println!("  Charset 2 (?2): {charset2}");
     println!("  Expected: 9 words (3 × 3)");
     println!();
 
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     charsets.insert(0, charset1.as_bytes().to_vec());
     charsets.insert(1, charset2.as_bytes().to_vec());
 
-    let gpu_output = gpu.generate_batch(&charsets, &[0, 1], 0, 9, 0)?;  // format=0 (newlines)
+    let gpu_output = gpu.generate_batch(&charsets, &[0, 1], 0, 9, 0)?; // format=0 (newlines)
     let gpu_words: Vec<&[u8]> = gpu_output
         .split(|&b| b == b'\n')
         .filter(|w| !w.is_empty())
@@ -78,10 +78,12 @@ fn main() -> Result<()> {
                 let gpu_str = String::from_utf8_lossy(gpu_word);
 
                 if gpu_str == *mp_word {
-                    println!("[{}] ✅ {} == {} (GPU vs maskprocessor)", i, gpu_str, mp_word);
+                    println!(
+                        "[{i}] ✅ {gpu_str} == {mp_word} (GPU vs maskprocessor)"
+                    );
                     matches += 1;
                 } else {
-                    println!("[{}] ❌ {} != {} (MISMATCH!)", i, gpu_str, mp_word);
+                    println!("[{i}] ❌ {gpu_str} != {mp_word} (MISMATCH!)");
                     mismatches += 1;
                 }
             }
@@ -98,13 +100,15 @@ fn main() -> Result<()> {
 
             if mismatches > 0 {
                 println!("❌ VALIDATION FAILED!");
-                println!("   Matches: {}", matches);
-                println!("   Mismatches: {}", mismatches);
+                println!("   Matches: {matches}");
+                println!("   Mismatches: {mismatches}");
                 anyhow::bail!("GPU output does not match maskprocessor");
             }
 
             println!("🎉 SUCCESS! GPU matches maskprocessor perfectly!");
-            println!("   All {} words validated against external ground truth", matches);
+            println!(
+                "   All {matches} words validated against external ground truth"
+            );
         }
         Ok(output) => {
             println!("⚠️  maskprocessor exited with error: {:?}", output.status);
@@ -113,7 +117,7 @@ fn main() -> Result<()> {
             println!("Skipping maskprocessor validation...");
         }
         Err(e) => {
-            println!("⚠️  maskprocessor not found: {}", e);
+            println!("⚠️  maskprocessor not found: {e}");
             println!();
             println!("To install maskprocessor:");
             println!("  git clone https://github.com/hashcat/maskprocessor");
@@ -161,10 +165,10 @@ fn main() -> Result<()> {
                 let gpu_str = String::from_utf8_lossy(gpu_word);
 
                 if gpu_str == *hc_word {
-                    println!("[{}] ✅ {} == {} (GPU vs hashcat)", i, gpu_str, hc_word);
+                    println!("[{i}] ✅ {gpu_str} == {hc_word} (GPU vs hashcat)");
                     matches += 1;
                 } else {
-                    println!("[{}] ❌ {} != {} (MISMATCH!)", i, gpu_str, hc_word);
+                    println!("[{i}] ❌ {gpu_str} != {hc_word} (MISMATCH!)");
                     mismatches += 1;
                 }
             }
@@ -181,13 +185,15 @@ fn main() -> Result<()> {
 
             if mismatches > 0 {
                 println!("❌ VALIDATION FAILED!");
-                println!("   Matches: {}", matches);
-                println!("   Mismatches: {}", mismatches);
+                println!("   Matches: {matches}");
+                println!("   Mismatches: {mismatches}");
                 anyhow::bail!("GPU output does not match hashcat");
             }
 
             println!("🎉 SUCCESS! GPU matches hashcat perfectly!");
-            println!("   All {} words validated against external ground truth", matches);
+            println!(
+                "   All {matches} words validated against external ground truth"
+            );
         }
         Ok(output) => {
             println!("⚠️  hashcat exited with error: {:?}", output.status);
@@ -196,7 +202,7 @@ fn main() -> Result<()> {
             println!("Skipping hashcat validation...");
         }
         Err(e) => {
-            println!("⚠️  hashcat not found: {}", e);
+            println!("⚠️  hashcat not found: {e}");
             println!();
             println!("To install hashcat:");
             println!("  # Arch Linux:");

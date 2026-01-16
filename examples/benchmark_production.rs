@@ -24,8 +24,8 @@ fn main() -> Result<()> {
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
 
-    println!("GPU: {}", device_name);
-    println!("Compute Capability: {}.{}", major, minor);
+    println!("GPU: {device_name}");
+    println!("Compute Capability: {major}.{minor}");
     println!();
 
     // Test pattern: ?1?2 where ?1="abc", ?2="123"
@@ -46,11 +46,11 @@ fn main() -> Result<()> {
 
     // Batch sizes to test
     let batch_sizes = vec![
-        10_000_000u64,      // 10M
-        50_000_000,         // 50M
-        100_000_000,        // 100M
-        500_000_000,        // 500M
-        1_000_000_000,      // 1B
+        10_000_000u64, // 10M
+        50_000_000,    // 50M
+        100_000_000,   // 100M
+        500_000_000,   // 500M
+        1_000_000_000, // 1B
     ];
 
     println!("Running benchmarks with realistic memory I/O...");
@@ -68,7 +68,7 @@ fn main() -> Result<()> {
             check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
 
             // Generate batch (includes kernel + memory I/O)
-            let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
+            let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?; // format=0 (newlines)
 
             // Record end
             check_cuda(cuEventRecord(end_event, ptr::null_mut()))?;
@@ -125,9 +125,9 @@ unsafe fn check_cuda(result: CUresult) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         } else {
-            format!("CUDA error code: {:?}", result)
+            format!("CUDA error code: {result:?}")
         };
-        anyhow::bail!("CUDA error: {}", error_msg);
+        anyhow::bail!("CUDA error: {error_msg}");
     }
     Ok(())
 }

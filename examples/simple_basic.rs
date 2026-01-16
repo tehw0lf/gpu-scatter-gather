@@ -42,8 +42,8 @@ fn main() -> Result<()> {
     // Charset 1: digits
     println!("📝 Defining character sets...");
     let mut charsets = HashMap::new();
-    charsets.insert(0, b"abc".to_vec());       // Charset 0: a, b, c
-    charsets.insert(1, b"123".to_vec());       // Charset 1: 1, 2, 3
+    charsets.insert(0, b"abc".to_vec()); // Charset 0: a, b, c
+    charsets.insert(1, b"123".to_vec()); // Charset 1: 1, 2, 3
     println!("   Charset 0: abc");
     println!("   Charset 1: 123\n");
 
@@ -51,14 +51,14 @@ fn main() -> Result<()> {
     // Mask defines the structure: [0, 1] means "one char from charset 0, one from charset 1"
     // This will generate: a1, a2, a3, b1, b2, b3, c1, c2, c3
     println!("🎭 Creating mask pattern...");
-    let mask = vec![0, 1];  // Pattern: ?0?1 (one from charset 0, one from charset 1)
+    let mask = vec![0, 1]; // Pattern: ?0?1 (one from charset 0, one from charset 1)
     println!("   Pattern: ?0?1 (charset 0 + charset 1)\n");
 
     // Step 4: Calculate keyspace size
     // Keyspace = product of charset sizes
     // In this case: 3 letters × 3 digits = 9 combinations
     let keyspace = 3 * 3; // abc (3) × 123 (3) = 9 total combinations
-    println!("📊 Keyspace size: {} combinations\n", keyspace);
+    println!("📊 Keyspace size: {keyspace} combinations\n");
 
     // Step 5: Generate the words
     // Format 2 = PACKED (no separators, just raw bytes)
@@ -71,7 +71,7 @@ fn main() -> Result<()> {
     let word_length = mask.len();
     let num_words = output.len() / word_length;
 
-    println!("📤 Generated {} words:", num_words);
+    println!("📤 Generated {num_words} words:");
     println!("─────────────────────");
 
     for i in 0..num_words {
@@ -79,7 +79,7 @@ fn main() -> Result<()> {
         let end = start + word_length;
         let word_bytes = &output[start..end];
         let word = String::from_utf8_lossy(word_bytes);
-        println!("{}", word);
+        println!("{word}");
     }
 
     println!("\n✨ Done!");

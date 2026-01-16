@@ -37,9 +37,7 @@ impl StatisticalSummary {
         assert!(!runs.is_empty(), "Need at least one run");
 
         let pattern_name = runs[0].pattern_name.clone();
-        let throughputs: Vec<f64> = runs.iter()
-            .map(|r| r.throughput_words_per_sec)
-            .collect();
+        let throughputs: Vec<f64> = runs.iter().map(|r| r.throughput_words_per_sec).collect();
 
         // Calculate mean
         let mean = throughputs.iter().sum::<f64>() / throughputs.len() as f64;
@@ -54,9 +52,8 @@ impl StatisticalSummary {
         };
 
         // Calculate standard deviation
-        let variance = throughputs.iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / throughputs.len() as f64;
+        let variance =
+            throughputs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / throughputs.len() as f64;
         let std_dev = variance.sqrt();
 
         // Calculate coefficient of variation
@@ -65,17 +62,17 @@ impl StatisticalSummary {
         // Calculate 95% confidence interval using t-distribution
         // t-value for 95% CI with different degrees of freedom
         let t_value = match throughputs.len() {
-            1 => 12.706,      // df=0 (not really valid, but prevents panic)
-            2 => 4.303,       // df=1
-            3 => 3.182,       // df=2
-            4 => 2.776,       // df=3
-            5 => 2.571,       // df=4
-            6 => 2.447,       // df=5
-            7 => 2.365,       // df=6
-            8 => 2.306,       // df=7
-            9 => 2.262,       // df=8
-            10 => 2.228,      // df=9
-            _ => 1.96,        // df>30, approximate with normal distribution
+            1 => 12.706, // df=0 (not really valid, but prevents panic)
+            2 => 4.303,  // df=1
+            3 => 3.182,  // df=2
+            4 => 2.776,  // df=3
+            5 => 2.571,  // df=4
+            6 => 2.447,  // df=5
+            7 => 2.365,  // df=6
+            8 => 2.306,  // df=7
+            9 => 2.262,  // df=8
+            10 => 2.228, // df=9
+            _ => 1.96,   // df>30, approximate with normal distribution
         };
         let margin = t_value * (std_dev / (throughputs.len() as f64).sqrt());
         let ci = (mean - margin, mean + margin);
@@ -88,7 +85,8 @@ impl StatisticalSummary {
         let iqr = q3 - q1;
         let lower_bound = q1 - 1.5 * iqr;
         let upper_bound = q3 + 1.5 * iqr;
-        let outliers: Vec<f64> = throughputs.iter()
+        let outliers: Vec<f64> = throughputs
+            .iter()
             .filter(|&&x| x < lower_bound || x > upper_bound)
             .copied()
             .collect();
@@ -123,7 +121,7 @@ pub fn format_throughput(words_per_sec: f64) -> String {
     } else if words_per_sec >= 1e3 {
         format!("{:.2}K words/s", words_per_sec / 1e3)
     } else {
-        format!("{:.2} words/s", words_per_sec)
+        format!("{words_per_sec:.2} words/s")
     }
 }
 

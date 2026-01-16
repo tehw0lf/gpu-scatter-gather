@@ -77,8 +77,7 @@ fn transpose_scalar(input: &[u8], output: &mut [u8], num_words: usize, word_leng
         for char_idx in 0..word_length {
             // Column-major input: char_idx * num_words + word_idx
             // Row-major output: word_idx * word_length + char_idx
-            output[word_idx * word_length + char_idx] =
-                input[char_idx * num_words + word_idx];
+            output[word_idx * word_length + char_idx] = input[char_idx * num_words + word_idx];
         }
     }
 }
@@ -251,7 +250,10 @@ mod tests {
                     transpose_avx2(&column_major, &mut avx2_output, num_words, word_length)
                         .unwrap();
                 }
-                assert_eq!(scalar_output, avx2_output, "AVX2 and scalar results differ!");
+                assert_eq!(
+                    scalar_output, avx2_output,
+                    "AVX2 and scalar results differ!"
+                );
             }
         }
     }

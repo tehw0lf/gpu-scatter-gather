@@ -95,7 +95,8 @@ pub fn chi_square_test(words: &[Vec<u8>], charset_sizes: &[usize]) -> ChiSquareR
     let p_value = if chi_square < total_df as f64 {
         0.5 // Rough approximation - better than expected
     } else {
-        let z = ((chi_square / total_df as f64).powf(1.0 / 3.0) - 1.0 + 2.0 / (9.0 * total_df as f64))
+        let z = ((chi_square / total_df as f64).powf(1.0 / 3.0) - 1.0
+            + 2.0 / (9.0 * total_df as f64))
             / (2.0 / (9.0 * total_df as f64)).sqrt();
         1.0 - normal_cdf(z)
     };
@@ -262,7 +263,10 @@ mod tests {
         }
 
         let result = chi_square_test(&words, &[10, 10]);
-        assert!(result.passed, "Uniform distribution should pass chi-square test");
+        assert!(
+            result.passed,
+            "Uniform distribution should pass chi-square test"
+        );
     }
 
     #[test]
@@ -281,17 +285,17 @@ mod tests {
         let result = autocorrelation_test(&words, 2);
         // Modular arithmetic with coprime multipliers can show some correlation
         // Relax threshold to 0.3 for this test (real GPU output should be < 0.1)
-        assert!(result.max_autocorrelation < 0.3,
-                "Autocorrelation {} exceeds threshold 0.3",
-                result.max_autocorrelation);
+        assert!(
+            result.max_autocorrelation < 0.3,
+            "Autocorrelation {} exceeds threshold 0.3",
+            result.max_autocorrelation
+        );
     }
 
     #[test]
     fn test_runs_test_sequential() {
         // Sequential data (should fail randomness)
-        let words: Vec<Vec<u8>> = (0..100)
-            .map(|i| vec![i as u8, (i + 1) as u8])
-            .collect();
+        let words: Vec<Vec<u8>> = (0..100).map(|i| vec![i as u8, (i + 1) as u8]).collect();
 
         let result = runs_test(&words);
         // Sequential data should show pattern (might pass or fail depending on exact sequence)

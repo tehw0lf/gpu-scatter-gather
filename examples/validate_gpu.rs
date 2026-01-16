@@ -17,8 +17,8 @@ fn main() -> Result<()> {
     let mut gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
-    println!("✅ GPU: {}", device_name);
-    println!("   Compute Capability: {}.{}", major, minor);
+    println!("✅ GPU: {device_name}");
+    println!("   Compute Capability: {major}.{minor}");
     println!();
 
     // Test pattern: ?1?2 where ?1="abc", ?2="123"
@@ -39,7 +39,7 @@ fn main() -> Result<()> {
         .build()?;
 
     let keyspace = gen.keyspace_size();
-    println!("Keyspace size: {}", keyspace);
+    println!("Keyspace size: {keyspace}");
     println!();
 
     // Generate all words on CPU
@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     charsets.insert(0, charset1.as_bytes().to_vec());
     charsets.insert(1, charset2.as_bytes().to_vec());
 
-    let gpu_output = gpu.generate_batch(&charsets, &[0, 1], 0, keyspace as u64, 0)?;  // format=0 (newlines)
+    let gpu_output = gpu.generate_batch(&charsets, &[0, 1], 0, keyspace as u64, 0)?; // format=0 (newlines)
     println!("✅ GPU generated {} bytes", gpu_output.len());
     println!();
 
@@ -83,10 +83,10 @@ fn main() -> Result<()> {
         let gpu_str = String::from_utf8_lossy(gpu_word);
 
         if cpu_word == gpu_word {
-            println!("[{}] ✅ {} == {}", i, cpu_str, gpu_str);
+            println!("[{i}] ✅ {cpu_str} == {gpu_str}");
             matches += 1;
         } else {
-            println!("[{}] ❌ {} != {} (MISMATCH!)", i, cpu_str, gpu_str);
+            println!("[{i}] ❌ {cpu_str} != {gpu_str} (MISMATCH!)");
             mismatches += 1;
         }
     }
@@ -105,8 +105,12 @@ fn main() -> Result<()> {
     // Report results
     println!("VALIDATION RESULTS:");
     println!("  Total words: {}", cpu_words.len());
-    println!("  Matches: {} ({}%)", matches, (matches * 100) / cpu_words.len());
-    println!("  Mismatches: {}", mismatches);
+    println!(
+        "  Matches: {} ({}%)",
+        matches,
+        (matches * 100) / cpu_words.len()
+    );
+    println!("  Mismatches: {mismatches}");
     println!();
 
     if mismatches == 0 {

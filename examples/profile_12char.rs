@@ -17,8 +17,8 @@ fn main() -> Result<()> {
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
 
-    println!("GPU: {}", device_name);
-    println!("Compute Capability: {}.{}", major, minor);
+    println!("GPU: {device_name}");
+    println!("Compute Capability: {major}.{minor}");
     println!();
 
     // Charsets
@@ -27,7 +27,7 @@ fn main() -> Result<()> {
 
     let mut charsets = std::collections::HashMap::new();
     charsets.insert(0, lowercase.as_bytes().to_vec()); // ?l
-    charsets.insert(1, digits.as_bytes().to_vec());     // ?d
+    charsets.insert(1, digits.as_bytes().to_vec()); // ?d
 
     // Pattern: ?l?l?l?l?l?l?l?l?d?d?d?d (8 lowercase + 4 digits)
     let mask = vec![0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1];
@@ -40,7 +40,7 @@ fn main() -> Result<()> {
     // Run a 100M word batch for profiling
     let batch_size = 100_000_000u64;
 
-    println!("Generating {} words for profiling...", batch_size);
+    println!("Generating {batch_size} words for profiling...");
 
     unsafe {
         let mut start_event = ptr::null_mut();
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         check_cuda(cuEventCreate(&mut end_event, 0))?;
 
         check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
-        let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
+        let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 0)?; // format=0 (newlines)
         check_cuda(cuEventRecord(end_event, ptr::null_mut()))?;
         check_cuda(cuEventSynchronize(end_event))?;
 
@@ -61,9 +61,12 @@ fn main() -> Result<()> {
 
         println!();
         println!("Completed:");
-        println!("  Time: {:.4} s", elapsed_secs);
+        println!("  Time: {elapsed_secs:.4} s");
         println!("  Throughput: {:.2} M words/s", words_per_second / 1e6);
-        println!("  Memory bandwidth: {:.2} MB/s", (batch_size as f64 * 13.0) / elapsed_secs as f64 / 1e6);
+        println!(
+            "  Memory bandwidth: {:.2} MB/s",
+            (batch_size as f64 * 13.0) / elapsed_secs as f64 / 1e6
+        );
 
         check_cuda(cuEventDestroy_v2(start_event))?;
         check_cuda(cuEventDestroy_v2(end_event))?;
@@ -81,9 +84,9 @@ unsafe fn check_cuda(result: CUresult) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         } else {
-            format!("CUDA error code: {:?}", result)
+            format!("CUDA error code: {result:?}")
         };
-        anyhow::bail!("CUDA error: {}", error_msg);
+        anyhow::bail!("CUDA error: {error_msg}");
     }
     Ok(())
 }

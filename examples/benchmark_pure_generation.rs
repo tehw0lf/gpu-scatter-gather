@@ -4,13 +4,13 @@
 //! Fair comparison with hashcat's benchmark mode.
 
 use anyhow::Result;
-use gpu_scatter_gather::Charset;
-use gpu_scatter_gather::multigpu::MultiGpuContext;
 use gpu_scatter_gather::ffi::WG_FORMAT_PACKED;
+use gpu_scatter_gather::multigpu::MultiGpuContext;
+use gpu_scatter_gather::Charset;
 use std::collections::HashMap;
-use std::time::Instant;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 fn main() -> Result<()> {
     println!("🚀 Pure GPU Generation Benchmark (No Disk I/O)");
@@ -36,10 +36,13 @@ fn main() -> Result<()> {
 
     println!("Configuration:");
     println!("  Mask: ?l?l?l?l?l?l?l?l?l?l?l?l?l?l?l?l (16 lowercase)");
-    println!("  Batch size: {} words", batch_size);
-    println!("  Number of batches: {}", num_batches);
-    println!("  Total words: {:.2} billion", (batch_size * num_batches) as f64 / 1e9);
-    println!("  Word length: {} bytes", word_length);
+    println!("  Batch size: {batch_size} words");
+    println!("  Number of batches: {num_batches}");
+    println!(
+        "  Total words: {:.2} billion",
+        (batch_size * num_batches) as f64 / 1e9
+    );
+    println!("  Word length: {word_length} bytes");
     println!();
 
     // Warmup run
@@ -56,10 +59,13 @@ fn main() -> Result<()> {
             |data| -> std::io::Result<()> {
                 bytes_counter.fetch_add(data.len() as u64, Ordering::Relaxed);
                 Ok(())
-            }
+            },
         )?;
     }
-    println!("✅ Warmup complete ({} bytes processed)", total_bytes.load(Ordering::Relaxed));
+    println!(
+        "✅ Warmup complete ({} bytes processed)",
+        total_bytes.load(Ordering::Relaxed)
+    );
     println!();
 
     // Main benchmark - just count bytes, don't write
@@ -85,7 +91,7 @@ fn main() -> Result<()> {
                 // Just count bytes - no disk I/O!
                 bytes_counter.fetch_add(data.len() as u64, Ordering::Relaxed);
                 Ok(())
-            }
+            },
         )?;
 
         total_words += batch_size;
@@ -108,17 +114,27 @@ fn main() -> Result<()> {
 
     let total_elapsed = total_start.elapsed();
     let overall_throughput = total_words as f64 / total_elapsed.as_secs_f64();
-    let overall_bandwidth = (total_words * word_length as u64) as f64 / total_elapsed.as_secs_f64() / 1e9;
+    let overall_bandwidth =
+        (total_words * word_length as u64) as f64 / total_elapsed.as_secs_f64() / 1e9;
     let total_bytes_processed = total_bytes.load(Ordering::Relaxed);
 
     println!();
     println!("📊 Final Results:");
     println!("{}", "=".repeat(70));
-    println!("Total words generated: {:.2} billion", total_words as f64 / 1e9);
-    println!("Total bytes processed: {:.2} GB", total_bytes_processed as f64 / 1e9);
+    println!(
+        "Total words generated: {:.2} billion",
+        total_words as f64 / 1e9
+    );
+    println!(
+        "Total bytes processed: {:.2} GB",
+        total_bytes_processed as f64 / 1e9
+    );
     println!("Total time: {:.2} seconds", total_elapsed.as_secs_f64());
-    println!("Overall throughput: {:.2} M words/s", overall_throughput / 1e6);
-    println!("Overall bandwidth: {:.2} GB/s", overall_bandwidth);
+    println!(
+        "Overall throughput: {:.2} M words/s",
+        overall_throughput / 1e6
+    );
+    println!("Overall bandwidth: {overall_bandwidth:.2} GB/s");
     println!();
 
     // Compare with competitors
@@ -126,13 +142,19 @@ fn main() -> Result<()> {
     println!("{}", "=".repeat(70));
     println!("Cracken (disk I/O):           ~28 M words/s");
     println!("Our tool (disk I/O):          ~17 M words/s");
-    println!("Our tool (pure generation):   {:.2} M words/s  ⬅️ THIS BENCHMARK", overall_throughput / 1e6);
+    println!(
+        "Our tool (pure generation):   {:.2} M words/s  ⬅️ THIS BENCHMARK",
+        overall_throughput / 1e6
+    );
     println!();
     println!("Hashcat MD5 benchmark:        72,621 MH/s (includes hashing)");
     println!("  → If we assume MD5 is ~10% overhead, generation ≈ 80,000 M words/s");
     println!("  → But hashcat generates on-GPU for direct hashing (different use case)");
     println!();
-    println!("Speedup vs Cracken:           {:.1}x", overall_throughput / 28_000_000.0);
+    println!(
+        "Speedup vs Cracken:           {:.1}x",
+        overall_throughput / 28_000_000.0
+    );
     println!();
 
     Ok(())

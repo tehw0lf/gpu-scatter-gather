@@ -9,9 +9,7 @@ use anyhow::Result;
 use chrono::Local;
 use gpu_scatter_gather::gpu::GpuContext;
 use serde::{Deserialize, Serialize};
-use statistical_validation::{
-    autocorrelation_test, chi_square_test, runs_test, ValidationResults,
-};
+use statistical_validation::{autocorrelation_test, chi_square_test, runs_test, ValidationResults};
 use std::collections::HashMap;
 
 /// Test pattern configuration
@@ -126,7 +124,10 @@ impl From<ValidationResults> for SerializableResults {
 }
 
 /// Run validation for a single pattern
-fn validate_pattern(gpu: &mut GpuContext, pattern: &ValidationPattern) -> Result<ValidationResults> {
+fn validate_pattern(
+    gpu: &mut GpuContext,
+    pattern: &ValidationPattern,
+) -> Result<ValidationResults> {
     println!("\n=== Validating: {} ===", pattern.name);
     println!("Mask: {}", pattern.mask_description);
     println!("Sample size: {}", pattern.sample_size);
@@ -138,7 +139,7 @@ fn validate_pattern(gpu: &mut GpuContext, pattern: &ValidationPattern) -> Result
         &pattern.mask,
         0,
         pattern.sample_size as u64,
-        0,  // format=0 (newlines)
+        0, // format=0 (newlines)
     )?;
 
     // Parse output into words
@@ -162,7 +163,14 @@ fn validate_pattern(gpu: &mut GpuContext, pattern: &ValidationPattern) -> Result
         chi_square.critical_value_95,
         chi_square.p_value_approx
     );
-    println!("    Result: {}", if chi_square.passed { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "    Result: {}",
+        if chi_square.passed {
+            "✅ PASS"
+        } else {
+            "❌ FAIL"
+        }
+    );
 
     // Autocorrelation test
     println!("  Autocorrelation test for independence...");
@@ -172,12 +180,16 @@ fn validate_pattern(gpu: &mut GpuContext, pattern: &ValidationPattern) -> Result
         autocorr.max_autocorrelation
     );
     if !autocorr.significant_lags.is_empty() {
-        println!(
-            "    Significant lags: {:?}",
-            autocorr.significant_lags
-        );
+        println!("    Significant lags: {:?}", autocorr.significant_lags);
     }
-    println!("    Result: {}", if autocorr.passed { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "    Result: {}",
+        if autocorr.passed {
+            "✅ PASS"
+        } else {
+            "❌ FAIL"
+        }
+    );
 
     // Runs test
     println!("  Runs test for randomness...");
@@ -186,7 +198,10 @@ fn validate_pattern(gpu: &mut GpuContext, pattern: &ValidationPattern) -> Result
         "    Runs = {}, expected = {:.2}, z-score = {:.3}",
         runs.num_runs, runs.expected_runs, runs.z_score
     );
-    println!("    Result: {}", if runs.passed { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "    Result: {}",
+        if runs.passed { "✅ PASS" } else { "❌ FAIL" }
+    );
 
     Ok(ValidationResults {
         pattern_name: pattern.name.clone(),
@@ -204,8 +219,8 @@ fn run_validation_suite() -> Result<Vec<ValidationResults>> {
     let (major, minor) = gpu.compute_capability();
 
     println!("=== GPU Scatter-Gather Statistical Validation Suite ===");
-    println!("GPU: {}", device_name);
-    println!("Compute Capability: {}.{}", major, minor);
+    println!("GPU: {device_name}");
+    println!("Compute Capability: {major}.{minor}");
     println!();
 
     let patterns = ValidationPattern::standard_patterns();
@@ -226,11 +241,7 @@ fn run_validation_suite() -> Result<Vec<ValidationResults>> {
 }
 
 /// Generate markdown report
-fn generate_report(
-    results: &[ValidationResults],
-    filename: &str,
-    gpu_info: &str,
-) -> Result<()> {
+fn generate_report(results: &[ValidationResults], filename: &str, gpu_info: &str) -> Result<()> {
     let mut report = String::new();
 
     report.push_str("# Statistical Validation Results\n\n");
@@ -238,7 +249,7 @@ fn generate_report(
         "**Date:** {}\n",
         Local::now().format("%Y-%m-%d %H:%M:%S")
     ));
-    report.push_str(&format!("**GPU:** {}\n", gpu_info));
+    report.push_str(&format!("**GPU:** {gpu_info}\n"));
     report.push_str("\n---\n\n");
 
     report.push_str("## Executive Summary\n\n");
@@ -247,13 +258,14 @@ fn generate_report(
     let passed_tests = results.iter().filter(|r| r.all_passed()).count();
 
     report.push_str(&format!(
-        "**Overall Result:** {}/{} patterns passed all tests\n\n",
-        passed_tests, total_tests
+        "**Overall Result:** {passed_tests}/{total_tests} patterns passed all tests\n\n"
     ));
 
     if passed_tests == total_tests {
         report.push_str("✅ **All patterns passed statistical validation!**\n\n");
-        report.push_str("The GPU scatter-gather algorithm produces statistically unbiased output with:\n");
+        report.push_str(
+            "The GPU scatter-gather algorithm produces statistically unbiased output with:\n",
+        );
         report.push_str("- Uniform distribution of characters (Chi-square test)\n");
         report.push_str("- No significant autocorrelation (independence test)\n");
         report.push_str("- Random sequence ordering (runs test)\n\n");
@@ -262,17 +274,33 @@ fn generate_report(
     }
 
     report.push_str("## Summary Table\n\n");
-    report.push_str("| Pattern | Sample Size | Chi-square | Autocorrelation | Runs Test | Overall |\n");
-    report.push_str("|---------|-------------|------------|-----------------|-----------|----------|\n");
+    report.push_str(
+        "| Pattern | Sample Size | Chi-square | Autocorrelation | Runs Test | Overall |\n",
+    );
+    report.push_str(
+        "|---------|-------------|------------|-----------------|-----------|----------|\n",
+    );
 
     for result in results {
         report.push_str(&format!(
             "| {} | {:>10} | {} | {} | {} | {} |\n",
             result.pattern_name,
             result.sample_size,
-            if result.chi_square.passed { "✅" } else { "❌" },
-            if result.autocorrelation.passed { "✅" } else { "❌" },
-            if result.runs_test.passed { "✅" } else { "❌" },
+            if result.chi_square.passed {
+                "✅"
+            } else {
+                "❌"
+            },
+            if result.autocorrelation.passed {
+                "✅"
+            } else {
+                "❌"
+            },
+            if result.runs_test.passed {
+                "✅"
+            } else {
+                "❌"
+            },
             if result.all_passed() { "✅" } else { "❌" }
         ));
     }
@@ -281,7 +309,10 @@ fn generate_report(
 
     for result in results {
         report.push_str(&format!("### {}\n\n", result.pattern_name));
-        report.push_str(&format!("**Sample Size:** {} words\n\n", result.sample_size));
+        report.push_str(&format!(
+            "**Sample Size:** {} words\n\n",
+            result.sample_size
+        ));
 
         report.push_str("#### Chi-square Test (Uniform Distribution)\n\n");
         report.push_str(&format!(
@@ -302,7 +333,11 @@ fn generate_report(
         ));
         report.push_str(&format!(
             "- **Result:** {}\n\n",
-            if result.chi_square.passed { "✅ PASS" } else { "❌ FAIL" }
+            if result.chi_square.passed {
+                "✅ PASS"
+            } else {
+                "❌ FAIL"
+            }
         ));
 
         report.push_str("#### Autocorrelation Test (Independence)\n\n");
@@ -324,7 +359,11 @@ fn generate_report(
         }
         report.push_str(&format!(
             "- **Result:** {}\n\n",
-            if result.autocorrelation.passed { "✅ PASS" } else { "❌ FAIL" }
+            if result.autocorrelation.passed {
+                "✅ PASS"
+            } else {
+                "❌ FAIL"
+            }
         ));
 
         report.push_str("#### Runs Test (Randomness)\n\n");
@@ -340,24 +379,27 @@ fn generate_report(
             "- **Standard deviation:** {:.2}\n",
             result.runs_test.std_dev
         ));
-        report.push_str(&format!(
-            "- **Z-score:** {:.3}\n",
-            result.runs_test.z_score
-        ));
+        report.push_str(&format!("- **Z-score:** {:.3}\n", result.runs_test.z_score));
         report.push_str(&format!(
             "- **Critical z (95%):** {:.2}\n",
             result.runs_test.critical_z_95
         ));
         report.push_str(&format!(
             "- **Result:** {}\n\n",
-            if result.runs_test.passed { "✅ PASS" } else { "❌ FAIL" }
+            if result.runs_test.passed {
+                "✅ PASS"
+            } else {
+                "❌ FAIL"
+            }
         ));
     }
 
     report.push_str("## Interpretation\n\n");
     report.push_str("### Chi-square Test\n");
     report.push_str("Tests if characters at each position follow a uniform distribution. ");
-    report.push_str("A passing result means each character in the charset appears with equal probability, ");
+    report.push_str(
+        "A passing result means each character in the charset appears with equal probability, ",
+    );
     report.push_str("indicating no bias in the mixed-radix algorithm.\n\n");
 
     report.push_str("### Autocorrelation Test\n");
@@ -371,7 +413,7 @@ fn generate_report(
     report.push_str("(e.g., not always increasing or always decreasing).\n\n");
 
     std::fs::write(filename, report)?;
-    println!("\n✅ Report saved to: {}", filename);
+    println!("\n✅ Report saved to: {filename}");
     Ok(())
 }
 
@@ -382,7 +424,7 @@ fn main() -> Result<()> {
     let gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
-    let gpu_info = format!("{} (Compute Capability {}.{})", device_name, major, minor);
+    let gpu_info = format!("{device_name} (Compute Capability {major}.{minor})");
     drop(gpu);
 
     // Run validation suite
@@ -401,14 +443,14 @@ fn main() -> Result<()> {
 
     let json = serde_json::to_string_pretty(&serializable)?;
     std::fs::write(
-        format!("{}/validation_{}.json", results_dir, timestamp),
+        format!("{results_dir}/validation_{timestamp}.json"),
         json,
     )?;
 
     // Generate markdown report
     generate_report(
         &results,
-        &format!("docs/STATISTICAL_VALIDATION_{}.md", timestamp),
+        &format!("docs/STATISTICAL_VALIDATION_{timestamp}.md"),
         &gpu_info,
     )?;
 
@@ -416,8 +458,8 @@ fn main() -> Result<()> {
     println!("\n=== Summary ===");
     let total = results.len();
     let passed = results.iter().filter(|r| r.all_passed()).count();
-    println!("Total patterns tested: {}", total);
-    println!("Patterns passed: {}", passed);
+    println!("Total patterns tested: {total}");
+    println!("Patterns passed: {passed}");
     println!("Patterns failed: {}", total - passed);
 
     if passed == total {

@@ -26,8 +26,8 @@ fn main() -> Result<()> {
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
 
-    println!("GPU: {}", device_name);
-    println!("Compute Capability: {}.{}", major, minor);
+    println!("GPU: {device_name}");
+    println!("Compute Capability: {major}.{minor}");
     println!();
 
     // Charsets
@@ -36,27 +36,50 @@ fn main() -> Result<()> {
 
     let mut charsets = std::collections::HashMap::new();
     charsets.insert(0, lowercase.as_bytes().to_vec()); // ?l
-    charsets.insert(1, digits.as_bytes().to_vec());     // ?d
+    charsets.insert(1, digits.as_bytes().to_vec()); // ?d
 
     // Test configurations: (word_length, num_lowercase, num_digits, description, keyspace)
     let test_configs = vec![
-        (8,  4, 4, "?l?l?l?l?d?d?d?d", 26u64.pow(4) * 10u64.pow(4)),          // 456,976,000
-        (10, 6, 4, "?l?l?l?l?l?l?d?d?d?d", 26u64.pow(6) * 10u64.pow(4)),      // 3,089,157,760,000
-        (12, 8, 4, "?l?l?l?l?l?l?l?l?d?d?d?d", 26u64.pow(8) * 10u64.pow(4)), // 20,863,377,862,720,000
-        (16, 12, 4, "?l?l?l?l?l?l?l?l?l?l?l?l?d?d?d?d", 26u64.pow(12) * 10u64.pow(4)), // ~9.5e16
+        (8, 4, 4, "?l?l?l?l?d?d?d?d", 26u64.pow(4) * 10u64.pow(4)), // 456,976,000
+        (
+            10,
+            6,
+            4,
+            "?l?l?l?l?l?l?d?d?d?d",
+            26u64.pow(6) * 10u64.pow(4),
+        ), // 3,089,157,760,000
+        (
+            12,
+            8,
+            4,
+            "?l?l?l?l?l?l?l?l?d?d?d?d",
+            26u64.pow(8) * 10u64.pow(4),
+        ), // 20,863,377,862,720,000
+        (
+            16,
+            12,
+            4,
+            "?l?l?l?l?l?l?l?l?l?l?l?l?d?d?d?d",
+            26u64.pow(12) * 10u64.pow(4),
+        ), // ~9.5e16
     ];
 
     // Batch sizes to test (smaller for longer words due to larger keyspace)
     let batch_sizes = vec![
-        10_000_000u64,   // 10M
-        50_000_000,      // 50M
-        100_000_000,     // 100M
+        10_000_000u64, // 10M
+        50_000_000,    // 50M
+        100_000_000,   // 100M
     ];
 
     for (word_length, num_lower, num_digit, pattern, keyspace) in test_configs {
-        println!("📊 Testing {}-character passwords: {}", word_length, pattern);
-        println!("   Lowercase: {}, Digits: {}", num_lower, num_digit);
-        println!("   Total keyspace: {} combinations ({:.2e})", keyspace, keyspace as f64);
+        println!(
+            "📊 Testing {word_length}-character passwords: {pattern}"
+        );
+        println!("   Lowercase: {num_lower}, Digits: {num_digit}");
+        println!(
+            "   Total keyspace: {} combinations ({:.2e})",
+            keyspace, keyspace as f64
+        );
         println!();
 
         // Build mask pattern
@@ -78,7 +101,9 @@ fn main() -> Result<()> {
             for &batch_size in &batch_sizes {
                 // Skip if batch size exceeds keyspace
                 if batch_size > keyspace {
-                    println!("   Batch: {:>12} words | SKIPPED (exceeds keyspace)", batch_size);
+                    println!(
+                        "   Batch: {batch_size:>12} words | SKIPPED (exceeds keyspace)"
+                    );
                     continue;
                 }
 
@@ -86,7 +111,7 @@ fn main() -> Result<()> {
                 check_cuda(cuEventRecord(start_event, ptr::null_mut()))?;
 
                 // Generate batch (includes kernel + memory I/O)
-                let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 2)?;  // format=2 (PACKED)
+                let _output = gpu.generate_batch(&charsets, &mask, 0, batch_size, 2)?; // format=2 (PACKED)
 
                 // Record end
                 check_cuda(cuEventRecord(end_event, ptr::null_mut()))?;
@@ -98,7 +123,8 @@ fn main() -> Result<()> {
 
                 let elapsed_secs = elapsed_ms / 1000.0;
                 let words_per_second = batch_size as f64 / elapsed_secs as f64;
-                let mb_per_second = (batch_size as f64 * word_length as f64) / elapsed_secs as f64 / 1e6;  // PACKED format has no separator
+                let mb_per_second =
+                    (batch_size as f64 * word_length as f64) / elapsed_secs as f64 / 1e6; // PACKED format has no separator
 
                 println!(
                     "   Batch: {:>12} words | Time: {:>7.4} s | {:>7.2} M words/s | {:>8.2} MB/s",
@@ -147,9 +173,9 @@ unsafe fn check_cuda(result: CUresult) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         } else {
-            format!("CUDA error code: {:?}", result)
+            format!("CUDA error code: {result:?}")
         };
-        anyhow::bail!("CUDA error: {}", error_msg);
+        anyhow::bail!("CUDA error: {error_msg}");
     }
     Ok(())
 }

@@ -13,8 +13,8 @@ fn main() -> Result<()> {
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
 
-    println!("GPU: {}", device_name);
-    println!("Compute Capability: {}.{}", major, minor);
+    println!("GPU: {device_name}");
+    println!("Compute Capability: {major}.{minor}");
     println!();
 
     // 12-char passwords
@@ -34,10 +34,10 @@ fn main() -> Result<()> {
     println!();
 
     let batch_size = 100_000_000;
-    println!("Generating {} words for profiling...", batch_size);
+    println!("Generating {batch_size} words for profiling...");
 
     let start = std::time::Instant::now();
-    let _output = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size, 0)?;  // format=0 (newlines)
+    let _output = gpu.generate_batch_transposed(&charsets, &mask, 0, batch_size, 0)?; // format=0 (newlines)
     let elapsed = start.elapsed();
 
     let throughput = batch_size as f64 / elapsed.as_secs_f64();
@@ -47,7 +47,7 @@ fn main() -> Result<()> {
     println!("Completed:");
     println!("  Time: {:.4} s", elapsed.as_secs_f64());
     println!("  Throughput: {:.2} M words/s", throughput / 1e6);
-    println!("  Memory bandwidth: {:.2} MB/s", bandwidth);
+    println!("  Memory bandwidth: {bandwidth:.2} MB/s");
 
     Ok(())
 }

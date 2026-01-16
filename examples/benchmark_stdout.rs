@@ -4,9 +4,9 @@
 //! Example: ./benchmark_stdout | pv -r > /dev/null
 
 use anyhow::Result;
-use gpu_scatter_gather::Charset;
-use gpu_scatter_gather::multigpu::MultiGpuContext;
 use gpu_scatter_gather::ffi::WG_FORMAT_PACKED;
+use gpu_scatter_gather::multigpu::MultiGpuContext;
+use gpu_scatter_gather::Charset;
 use std::collections::HashMap;
 use std::io::{self, Write};
 
@@ -34,9 +34,12 @@ fn main() -> Result<()> {
 
     eprintln!("Configuration:");
     eprintln!("  Mask: ?l?l?l?l?l?l?l?l?l?l?l?l?l?l?l?l (16 lowercase)");
-    eprintln!("  Batch size: {} words", batch_size);
-    eprintln!("  Total batches: {}", total_batches);
-    eprintln!("  Total words: {:.2} billion", (batch_size * total_batches) as f64 / 1e9);
+    eprintln!("  Batch size: {batch_size} words");
+    eprintln!("  Total batches: {total_batches}");
+    eprintln!(
+        "  Total words: {:.2} billion",
+        (batch_size * total_batches) as f64 / 1e9
+    );
     eprintln!();
 
     eprintln!("📝 Writing to stdout...");
@@ -57,12 +60,13 @@ fn main() -> Result<()> {
             start_index,
             batch_size,
             WG_FORMAT_PACKED,
-            |data| writer.write_all(data)
+            |data| writer.write_all(data),
         )?;
 
         // Progress to stderr every 10 batches
         if (batch + 1) % 10 == 0 {
-            eprintln!("  Batch {}/{} complete ({:.2} billion words written)",
+            eprintln!(
+                "  Batch {}/{} complete ({:.2} billion words written)",
                 batch + 1,
                 total_batches,
                 ((batch + 1) * batch_size) as f64 / 1e9
@@ -73,7 +77,10 @@ fn main() -> Result<()> {
     writer.flush()?;
 
     eprintln!();
-    eprintln!("✅ Complete! Generated {:.2} billion words", (batch_size * total_batches) as f64 / 1e9);
+    eprintln!(
+        "✅ Complete! Generated {:.2} billion words",
+        (batch_size * total_batches) as f64 / 1e9
+    );
 
     Ok(())
 }

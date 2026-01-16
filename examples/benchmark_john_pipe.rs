@@ -4,12 +4,12 @@
 //! Test: ./benchmark_john_pipe | john --stdin --format=raw-md5 /data/claude/test_hashes.txt
 
 use anyhow::Result;
-use gpu_scatter_gather::Charset;
-use gpu_scatter_gather::multigpu::MultiGpuContext;
 use gpu_scatter_gather::ffi::WG_FORMAT_PACKED;
+use gpu_scatter_gather::multigpu::MultiGpuContext;
+use gpu_scatter_gather::Charset;
 use std::collections::HashMap;
-use std::io::{self, Write};
 use std::env;
+use std::io::{self, Write};
 
 fn main() -> Result<()> {
     // Get batch count from args, default to 20 (1 billion words)
@@ -35,14 +35,17 @@ fn main() -> Result<()> {
     charsets.insert(0, lowercase.as_bytes().to_vec());
 
     // Shorter mask for faster testing: 8 chars
-    let mask = vec![0; 8];  // ?l?l?l?l?l?l?l?l
+    let mask = vec![0; 8]; // ?l?l?l?l?l?l?l?l
     let batch_size = 50_000_000u64;
 
     eprintln!("Configuration:");
     eprintln!("  Mask: ?l?l?l?l?l?l?l?l (8 lowercase)");
-    eprintln!("  Batch size: {} words", batch_size);
-    eprintln!("  Total batches: {}", total_batches);
-    eprintln!("  Total words: {:.2} billion", (batch_size * total_batches) as f64 / 1e9);
+    eprintln!("  Batch size: {batch_size} words");
+    eprintln!("  Total batches: {total_batches}");
+    eprintln!(
+        "  Total words: {:.2} billion",
+        (batch_size * total_batches) as f64 / 1e9
+    );
     eprintln!();
 
     eprintln!("📝 Piping to John the Ripper...");
@@ -62,11 +65,12 @@ fn main() -> Result<()> {
             start_index,
             batch_size,
             WG_FORMAT_PACKED,
-            |data| writer.write_all(data)
+            |data| writer.write_all(data),
         )?;
 
         if (batch + 1) % 10 == 0 {
-            eprintln!("  Batch {}/{} ({:.2} M words)",
+            eprintln!(
+                "  Batch {}/{} ({:.2} M words)",
                 batch + 1,
                 total_batches,
                 ((batch + 1) * batch_size) as f64 / 1e6
@@ -76,7 +80,10 @@ fn main() -> Result<()> {
 
     writer.flush()?;
     eprintln!();
-    eprintln!("✅ Done! Piped {:.2} billion words", (batch_size * total_batches) as f64 / 1e9);
+    eprintln!(
+        "✅ Done! Piped {:.2} billion words",
+        (batch_size * total_batches) as f64 / 1e9
+    );
 
     Ok(())
 }

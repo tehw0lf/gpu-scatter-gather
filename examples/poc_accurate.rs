@@ -41,8 +41,10 @@ fn main() -> Result<()> {
             device,
         ))?;
 
-        println!("GPU: {}", name_str);
-        println!("Compute Capability: {}.{}", compute_capability_major, compute_capability_minor);
+        println!("GPU: {name_str}");
+        println!(
+            "Compute Capability: {compute_capability_major}.{compute_capability_minor}"
+        );
         println!();
 
         // Create context
@@ -61,11 +63,18 @@ fn main() -> Result<()> {
         let ptx_cstring = CString::new(ptx_data)?;
 
         let mut module = ptr::null_mut();
-        check_cuda(cuModuleLoadData(&mut module, ptx_cstring.as_ptr() as *const _))?;
+        check_cuda(cuModuleLoadData(
+            &mut module,
+            ptx_cstring.as_ptr() as *const _,
+        ))?;
 
         let kernel_name = CString::new("poc_generate_words_compute_only")?;
         let mut kernel = ptr::null_mut();
-        check_cuda(cuModuleGetFunction(&mut kernel, module, kernel_name.as_ptr()))?;
+        check_cuda(cuModuleGetFunction(
+            &mut kernel,
+            module,
+            kernel_name.as_ptr(),
+        ))?;
 
         println!("✅ Kernel loaded!");
         println!();
@@ -90,22 +99,47 @@ fn main() -> Result<()> {
         let mut d_checksum = 0u64;
 
         check_cuda(cuMemAlloc_v2(&mut d_charset_data, charset_data.len()))?;
-        check_cuda(cuMemAlloc_v2(&mut d_charset_offsets, 2 * std::mem::size_of::<i32>()))?;
-        check_cuda(cuMemAlloc_v2(&mut d_charset_sizes, 2 * std::mem::size_of::<i32>()))?;
-        check_cuda(cuMemAlloc_v2(&mut d_mask_pattern, 2 * std::mem::size_of::<i32>()))?;
+        check_cuda(cuMemAlloc_v2(
+            &mut d_charset_offsets,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
+        check_cuda(cuMemAlloc_v2(
+            &mut d_charset_sizes,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
+        check_cuda(cuMemAlloc_v2(
+            &mut d_mask_pattern,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
         check_cuda(cuMemAlloc_v2(&mut d_checksum, std::mem::size_of::<u64>()))?;
 
-        check_cuda(cuMemcpyHtoD_v2(d_charset_data, charset_data.as_ptr() as *const _, charset_data.len()))?;
-        check_cuda(cuMemcpyHtoD_v2(d_charset_offsets, charset_offsets.as_ptr() as *const _, 2 * std::mem::size_of::<i32>()))?;
-        check_cuda(cuMemcpyHtoD_v2(d_charset_sizes, charset_sizes.as_ptr() as *const _, 2 * std::mem::size_of::<i32>()))?;
-        check_cuda(cuMemcpyHtoD_v2(d_mask_pattern, mask_pattern.as_ptr() as *const _, 2 * std::mem::size_of::<i32>()))?;
+        check_cuda(cuMemcpyHtoD_v2(
+            d_charset_data,
+            charset_data.as_ptr() as *const _,
+            charset_data.len(),
+        ))?;
+        check_cuda(cuMemcpyHtoD_v2(
+            d_charset_offsets,
+            charset_offsets.as_ptr() as *const _,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
+        check_cuda(cuMemcpyHtoD_v2(
+            d_charset_sizes,
+            charset_sizes.as_ptr() as *const _,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
+        check_cuda(cuMemcpyHtoD_v2(
+            d_mask_pattern,
+            mask_pattern.as_ptr() as *const _,
+            2 * std::mem::size_of::<i32>(),
+        ))?;
 
         // Run multiple batch sizes to find realistic performance
         let batch_sizes = vec![
-            100_000_000u64,    // 100M
-            500_000_000,       // 500M
-            1_000_000_000,     // 1B
-            2_000_000_000,     // 2B
+            100_000_000u64, // 100M
+            500_000_000,    // 500M
+            1_000_000_000,  // 1B
+            2_000_000_000,  // 2B
         ];
 
         let block_size: u32 = 256;
@@ -120,7 +154,7 @@ fn main() -> Result<()> {
         println!();
 
         for &batch_size in &batch_sizes {
-            let grid_size: u32 = ((batch_size + block_size as u64 - 1) / block_size as u64) as u32;
+            let grid_size: u32 = batch_size.div_ceil(block_size as u64) as u32;
             let start_idx = 0u64;
 
             let mut params = [
@@ -212,9 +246,9 @@ unsafe fn check_cuda(result: CUresult) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         } else {
-            format!("CUDA error code: {:?}", result)
+            format!("CUDA error code: {result:?}")
         };
-        anyhow::bail!("CUDA error: {}", error_msg);
+        anyhow::bail!("CUDA error: {error_msg}");
     }
     Ok(())
 }

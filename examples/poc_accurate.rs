@@ -50,11 +50,17 @@ fn main() -> Result<()> {
         check_cuda(cuCtxCreate_v2(&mut context, 0, device))?;
 
         // Load kernel
+        let kernels_dir = option_env!("CUDA_KERNELS_DIR")
+            .map(|s| s.to_string())
+            .or_else(|| std::env::var("OUT_DIR").ok())
+            .unwrap_or_else(|| {
+                // Fallback: try to find in target directory
+                let manifest_dir = env!("CARGO_MANIFEST_DIR");
+                format!("{manifest_dir}/target/cuda_kernels")
+            });
+
         let ptx_path = format!(
-            "{}/wordlist_poc_sm_{}{}.ptx",
-            env!("CUDA_KERNELS_DIR"),
-            compute_capability_major,
-            compute_capability_minor
+            "{kernels_dir}/wordlist_poc_sm_{compute_capability_major}{compute_capability_minor}.ptx"
         );
 
         let ptx_data = std::fs::read(&ptx_path)?;

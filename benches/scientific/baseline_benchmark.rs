@@ -87,7 +87,7 @@ impl BenchmarkPattern {
 
 /// Run single benchmark iteration
 unsafe fn run_single_benchmark(
-    gpu: &GpuContext,
+    gpu: &mut GpuContext,
     pattern: &BenchmarkPattern,
 ) -> Result<BenchmarkRun> {
     // Prepare charsets as HashMap<usize, Vec<u8>>
@@ -177,7 +177,7 @@ pub fn run_baseline_suite() -> Result<HashMap<String, StatisticalSummary>> {
         // Warm-up runs
         println!("\nWarm-up runs (3x)...");
         for i in 1..=3 {
-            let run = unsafe { run_single_benchmark(&gpu, pattern)? };
+            let run = unsafe { run_single_benchmark(&mut gpu, pattern)? };
             println!(
                 "  Warm-up {}: {:.2}M words/s",
                 i,
@@ -189,7 +189,7 @@ pub fn run_baseline_suite() -> Result<HashMap<String, StatisticalSummary>> {
         println!("\nMeasurement runs (10x)...");
         let mut runs = Vec::new();
         for i in 1..=10 {
-            let run = unsafe { run_single_benchmark(&gpu, pattern)? };
+            let run = unsafe { run_single_benchmark(&mut gpu, pattern)? };
             println!(
                 "  Run {}: {:.2}M words/s",
                 i,
@@ -358,7 +358,7 @@ fn main() -> Result<()> {
     println!("=== GPU Scatter-Gather Baseline Benchmarks ===\n");
 
     // Get GPU info first
-    let mut gpu = GpuContext::new()?;
+    let gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
     let gpu_info = format!("{} (Compute Capability {}.{})", device_name, major, minor);

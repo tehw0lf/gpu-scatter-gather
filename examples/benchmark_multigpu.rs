@@ -185,7 +185,7 @@ fn benchmark_single_gpu(
     batch_size: u64,
     word_length: usize,
 ) -> Result<f64> {
-    let gpu = GpuContext::with_device(0)?;
+    let mut gpu = GpuContext::with_device(0)?;
 
     unsafe {
         let mut start_event = ptr::null_mut();

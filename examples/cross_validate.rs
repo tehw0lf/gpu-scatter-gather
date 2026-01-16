@@ -11,7 +11,6 @@
 
 use anyhow::Result;
 use gpu_scatter_gather::gpu::GpuContext;
-use gpu_scatter_gather::Charset;
 use std::process::Command;
 
 fn main() -> Result<()> {

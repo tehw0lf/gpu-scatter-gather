@@ -3,7 +3,7 @@
 //! This uses CUDA event timing which has nanosecond precision,
 //! unlike host-side timing which can have millisecond granularity.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use cuda_driver_sys::*;
 use std::ffi::CString;
 use std::ptr;

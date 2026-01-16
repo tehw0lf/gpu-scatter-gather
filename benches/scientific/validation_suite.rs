@@ -126,7 +126,7 @@ impl From<ValidationResults> for SerializableResults {
 }
 
 /// Run validation for a single pattern
-fn validate_pattern(gpu: &GpuContext, pattern: &ValidationPattern) -> Result<ValidationResults> {
+fn validate_pattern(gpu: &mut GpuContext, pattern: &ValidationPattern) -> Result<ValidationResults> {
     println!("\n=== Validating: {} ===", pattern.name);
     println!("Mask: {}", pattern.mask_description);
     println!("Sample size: {}", pattern.sample_size);
@@ -212,7 +212,7 @@ fn run_validation_suite() -> Result<Vec<ValidationResults>> {
     let mut results = Vec::new();
 
     for pattern in &patterns {
-        match validate_pattern(&gpu, pattern) {
+        match validate_pattern(&mut gpu, pattern) {
             Ok(result) => {
                 results.push(result);
             }
@@ -379,7 +379,7 @@ fn main() -> Result<()> {
     println!("=== GPU Scatter-Gather Statistical Validation Suite ===\n");
 
     // Get GPU info
-    let mut gpu = GpuContext::new()?;
+    let gpu = GpuContext::new()?;
     let device_name = gpu.device_name()?;
     let (major, minor) = gpu.compute_capability();
     let gpu_info = format!("{} (Compute Capability {}.{})", device_name, major, minor);

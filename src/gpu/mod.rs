@@ -250,7 +250,10 @@ impl GpuContext {
     ///
     /// # Returns
     /// Tuple of (device_pointer, output_size)
-    pub fn generate_batch_device_stream(
+    ///
+    /// # Safety
+    /// The `stream` parameter must be a valid CUstream or null.
+    pub unsafe fn generate_batch_device_stream(
         &self,
         charsets: &HashMap<usize, Vec<u8>>,
         mask: &[usize],

@@ -4,6 +4,9 @@
 //!
 //! Safety: All functions validate inputs and never panic across FFI boundary.
 
+// FFI functions accept raw pointers from C, which is inherently unsafe but necessary
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 use crate::gpu::GpuContext;
 use crate::multigpu::MultiGpuContext;
 use cuda_driver_sys::*;
@@ -667,14 +670,16 @@ pub extern "C" fn wg_generate_batch_stream(
     let mask = internal.mask.as_ref().unwrap();
     let word_length = mask.len();
 
-    match internal.gpu.generate_batch_device_stream(
-        &internal.charsets,
-        mask,
-        start_idx,
-        count,
-        stream,
-        internal.output_format,
-    ) {
+    match unsafe {
+        internal.gpu.generate_batch_device_stream(
+            &internal.charsets,
+            mask,
+            start_idx,
+            count,
+            stream,
+            internal.output_format,
+        )
+    } {
         Ok((device_ptr, buffer_size)) => {
             // Calculate stride based on output format
             let stride = match internal.output_format {

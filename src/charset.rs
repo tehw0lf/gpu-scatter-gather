@@ -42,7 +42,7 @@ impl Charset {
     }
 
     /// Create a charset from a string slice
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_string(s: &str) -> Self {
         Self {
             bytes: s.as_bytes().to_vec(),
         }
@@ -52,32 +52,32 @@ impl Charset {
 
     /// Lowercase letters: abcdefghijklmnopqrstuvwxyz
     pub fn lowercase() -> Self {
-        Self::from_str("abcdefghijklmnopqrstuvwxyz")
+        Self::from_string("abcdefghijklmnopqrstuvwxyz")
     }
 
     /// Uppercase letters: ABCDEFGHIJKLMNOPQRSTUVWXYZ
     pub fn uppercase() -> Self {
-        Self::from_str("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        Self::from_string("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
     }
 
     /// Digits: 0123456789
     pub fn digits() -> Self {
-        Self::from_str("0123456789")
+        Self::from_string("0123456789")
     }
 
     /// Lowercase + uppercase letters
     pub fn alpha() -> Self {
-        Self::from_str("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        Self::from_string("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
     }
 
     /// Letters + digits
     pub fn alphanumeric() -> Self {
-        Self::from_str("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        Self::from_string("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
     }
 
     /// Common special characters
     pub fn special() -> Self {
-        Self::from_str("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+        Self::from_string("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
     }
 
     /// All printable ASCII (0x20-0x7E)
@@ -88,7 +88,7 @@ impl Charset {
 
 impl From<&str> for Charset {
     fn from(s: &str) -> Self {
-        Self::from_str(s)
+        Self::from_string(s)
     }
 }
 

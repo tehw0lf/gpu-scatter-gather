@@ -39,12 +39,8 @@ fn main() -> Result<()> {
     let keyspace = 26u64.pow(8) * 10u64.pow(4);
 
     let mut mask = Vec::new();
-    for _ in 0..8 {
-        mask.push(0); // lowercase
-    }
-    for _ in 0..4 {
-        mask.push(1); // digit
-    }
+    mask.extend(std::iter::repeat_n(0, 8)); // lowercase
+    mask.extend(std::iter::repeat_n(1, 4)); // digit
 
     println!("📊 Testing 12-character passwords: {pattern}");
     println!("   Lowercase: 8, Digits: 4");

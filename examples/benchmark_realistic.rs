@@ -82,12 +82,8 @@ fn main() -> Result<()> {
 
         // Build mask pattern
         let mut mask = Vec::new();
-        for _ in 0..num_lower {
-            mask.push(0); // lowercase
-        }
-        for _ in 0..num_digit {
-            mask.push(1); // digit
-        }
+        mask.extend(std::iter::repeat_n(0, num_lower)); // lowercase
+        mask.extend(std::iter::repeat_n(1, num_digit)); // digit
 
         // Create CUDA events for timing
         unsafe {

@@ -442,10 +442,7 @@ fn main() -> Result<()> {
         .collect();
 
     let json = serde_json::to_string_pretty(&serializable)?;
-    std::fs::write(
-        format!("{results_dir}/validation_{timestamp}.json"),
-        json,
-    )?;
+    std::fs::write(format!("{results_dir}/validation_{timestamp}.json"), json)?;
 
     // Generate markdown report
     generate_report(

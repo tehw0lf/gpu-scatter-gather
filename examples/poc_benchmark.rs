@@ -56,9 +56,7 @@ fn main() -> Result<()> {
         ))?;
 
         println!("GPU: {name_str}");
-        println!(
-            "Compute Capability: {compute_capability_major}.{compute_capability_minor}"
-        );
+        println!("Compute Capability: {compute_capability_major}.{compute_capability_minor}");
         println!("Multiprocessors: {multiprocessor_count}");
         println!();
 
@@ -233,9 +231,7 @@ fn main() -> Result<()> {
         println!("🎉 RESULTS:");
         println!("{}", "=".repeat(70));
         println!();
-        println!(
-            "  Generated {BATCH_SIZE} words in {elapsed_secs:.4} seconds"
-        );
+        println!("  Generated {BATCH_SIZE} words in {elapsed_secs:.4} seconds");
         println!();
         println!(
             "  ⚡ THROUGHPUT: {:.2} BILLION words/second",

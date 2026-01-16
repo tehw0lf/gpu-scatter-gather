@@ -53,7 +53,7 @@ fn main() -> Result<()> {
     println!("⏳ Warmup run...");
     {
         let mut _warmup_vec = Vec::with_capacity(1_000_000 * word_length);
-        ctx.generate_batch_with(
+        let _ = ctx.generate_batch_with(
             &charsets,
             &mask,
             0,
@@ -80,10 +80,11 @@ fn main() -> Result<()> {
 
         let start = Instant::now();
 
-        ctx.generate_batch_with(&charsets, &mask, 0, batch_size, WG_FORMAT_PACKED, |data| {
-            result_vec.extend_from_slice(data);
-            Ok::<(), std::io::Error>(())
-        })?;
+        let _ =
+            ctx.generate_batch_with(&charsets, &mask, 0, batch_size, WG_FORMAT_PACKED, |data| {
+                result_vec.extend_from_slice(data);
+                Ok::<(), std::io::Error>(())
+            })?;
 
         let elapsed = start.elapsed();
         timings.push(elapsed.as_secs_f64());

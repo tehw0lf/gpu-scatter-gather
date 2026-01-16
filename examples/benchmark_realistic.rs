@@ -72,9 +72,7 @@ fn main() -> Result<()> {
     ];
 
     for (word_length, num_lower, num_digit, pattern, keyspace) in test_configs {
-        println!(
-            "📊 Testing {word_length}-character passwords: {pattern}"
-        );
+        println!("📊 Testing {word_length}-character passwords: {pattern}");
         println!("   Lowercase: {num_lower}, Digits: {num_digit}");
         println!(
             "   Total keyspace: {} combinations ({:.2e})",
@@ -101,9 +99,7 @@ fn main() -> Result<()> {
             for &batch_size in &batch_sizes {
                 // Skip if batch size exceeds keyspace
                 if batch_size > keyspace {
-                    println!(
-                        "   Batch: {batch_size:>12} words | SKIPPED (exceeds keyspace)"
-                    );
+                    println!("   Batch: {batch_size:>12} words | SKIPPED (exceeds keyspace)");
                     continue;
                 }
 

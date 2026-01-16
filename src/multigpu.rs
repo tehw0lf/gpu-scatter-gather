@@ -149,9 +149,7 @@ impl PinnedBuffer {
             );
 
             if result != CUresult::CUDA_SUCCESS {
-                anyhow::bail!(
-                    "Failed to allocate {size} bytes of pinned memory: {result:?}"
-                );
+                anyhow::bail!("Failed to allocate {size} bytes of pinned memory: {result:?}");
             }
 
             Ok(Self {
@@ -531,9 +529,7 @@ impl MultiGpuContext {
             .map(|_| PinnedBuffer::new(max_buffer_size))
             .collect::<Result<Vec<_>>>()
             .with_context(|| {
-                format!(
-                    "Failed to allocate pinned memory for {num_devices} workers"
-                )
+                format!("Failed to allocate pinned memory for {num_devices} workers")
             })?;
 
         // Initialize GPU stats (one per device)
@@ -695,9 +691,7 @@ impl MultiGpuContext {
 
             // Verify size
             if size != output_size {
-                eprintln!(
-                    "[WARNING] Size mismatch! expected={output_size}, got={size}"
-                );
+                eprintln!("[WARNING] Size mismatch! expected={output_size}, got={size}");
             }
 
             // Copy directly to pinned memory (FAST! ~2x faster than pageable)

@@ -56,7 +56,7 @@ fn main() -> Result<()> {
     {
         let warmup_file = File::create("/tmp/wordlist_warmup.txt")?;
         let mut warmup_writer = std::io::BufWriter::new(warmup_file);
-        ctx.generate_batch_with(
+        let _ = ctx.generate_batch_with(
             &charsets,
             &mask,
             0,
@@ -83,9 +83,10 @@ fn main() -> Result<()> {
 
         let start = Instant::now();
 
-        ctx.generate_batch_with(&charsets, &mask, 0, batch_size, WG_FORMAT_PACKED, |data| {
-            writer.write_all(data)
-        })?;
+        let _ =
+            ctx.generate_batch_with(&charsets, &mask, 0, batch_size, WG_FORMAT_PACKED, |data| {
+                writer.write_all(data)
+            })?;
 
         let elapsed = start.elapsed();
         timings.push(elapsed.as_secs_f64());

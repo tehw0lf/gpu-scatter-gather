@@ -42,9 +42,7 @@ fn main() -> Result<()> {
         ))?;
 
         println!("GPU: {name_str}");
-        println!(
-            "Compute Capability: {compute_capability_major}.{compute_capability_minor}"
-        );
+        println!("Compute Capability: {compute_capability_major}.{compute_capability_minor}");
         println!();
 
         // Create context

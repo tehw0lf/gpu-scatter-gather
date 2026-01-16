@@ -54,7 +54,7 @@ fn main() -> Result<()> {
     for batch in 0..total_batches {
         let start_index = batch * batch_size;
 
-        ctx.generate_batch_with(
+        let _ = ctx.generate_batch_with(
             &charsets,
             &mask,
             start_index,

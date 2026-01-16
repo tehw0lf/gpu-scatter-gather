@@ -78,9 +78,7 @@ fn main() -> Result<()> {
                 let gpu_str = String::from_utf8_lossy(gpu_word);
 
                 if gpu_str == *mp_word {
-                    println!(
-                        "[{i}] ✅ {gpu_str} == {mp_word} (GPU vs maskprocessor)"
-                    );
+                    println!("[{i}] ✅ {gpu_str} == {mp_word} (GPU vs maskprocessor)");
                     matches += 1;
                 } else {
                     println!("[{i}] ❌ {gpu_str} != {mp_word} (MISMATCH!)");
@@ -106,9 +104,7 @@ fn main() -> Result<()> {
             }
 
             println!("🎉 SUCCESS! GPU matches maskprocessor perfectly!");
-            println!(
-                "   All {matches} words validated against external ground truth"
-            );
+            println!("   All {matches} words validated against external ground truth");
         }
         Ok(output) => {
             println!("⚠️  maskprocessor exited with error: {:?}", output.status);
@@ -191,9 +187,7 @@ fn main() -> Result<()> {
             }
 
             println!("🎉 SUCCESS! GPU matches hashcat perfectly!");
-            println!(
-                "   All {matches} words validated against external ground truth"
-            );
+            println!("   All {matches} words validated against external ground truth");
         }
         Ok(output) => {
             println!("⚠️  hashcat exited with error: {:?}", output.status);

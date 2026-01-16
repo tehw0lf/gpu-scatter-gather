@@ -50,7 +50,7 @@ fn main() -> Result<()> {
     let total_bytes = Arc::new(AtomicU64::new(0));
     {
         let bytes_counter = total_bytes.clone();
-        ctx.generate_batch_with(
+        let _ = ctx.generate_batch_with(
             &charsets,
             &mask,
             0,
@@ -81,7 +81,7 @@ fn main() -> Result<()> {
         let start_index = batch * batch_size;
 
         let bytes_counter = total_bytes.clone();
-        ctx.generate_batch_with(
+        let _ = ctx.generate_batch_with(
             &charsets,
             &mask,
             start_index,

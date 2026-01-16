@@ -46,9 +46,7 @@ fn main() -> Result<()> {
         let gpu = GpuContext::with_device(device_id)?;
         let device_name = gpu.device_name()?;
         let (major, minor) = gpu.compute_capability();
-        println!(
-            "  Device {device_id}: {device_name} (sm_{major}{minor})"
-        );
+        println!("  Device {device_id}: {device_name} (sm_{major}{minor})");
     }
     println!();
 
@@ -94,17 +92,13 @@ fn main() -> Result<()> {
     for (word_length, num_lower, num_digit, pattern, keyspace) in test_configs {
         // Skip if batch size exceeds keyspace
         if batch_size > keyspace {
-            println!(
-                "⏭  Skipping {word_length}-char passwords: batch exceeds keyspace"
-            );
+            println!("⏭  Skipping {word_length}-char passwords: batch exceeds keyspace");
             println!();
             continue;
         }
 
         println!("{}", "=".repeat(70));
-        println!(
-            "📊 Testing {word_length}-character passwords: {pattern}"
-        );
+        println!("📊 Testing {word_length}-character passwords: {pattern}");
         println!("{}", "=".repeat(70));
         println!("   Lowercase: {num_lower}, Digits: {num_digit}");
         println!(

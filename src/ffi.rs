@@ -934,9 +934,7 @@ pub extern "C" fn wg_get_device_info(
         // Get total memory
         let mut total_mem = 0usize;
         if cuDeviceTotalMem_v2(&mut total_mem, device) != CUresult::CUDA_SUCCESS {
-            set_error(format!(
-                "Failed to get total memory for device {device_id}"
-            ));
+            set_error(format!("Failed to get total memory for device {device_id}"));
             return WG_ERROR_CUDA;
         }
 

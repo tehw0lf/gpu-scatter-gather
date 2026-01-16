@@ -72,19 +72,11 @@ fn main() -> Result<()> {
     let overhead_async =
         ((duration3.as_secs_f64() - duration1.as_secs_f64()) / duration1.as_secs_f64()) * 100.0;
 
-    println!(
-        "\nDirect GPU:       {throughput1:.2} M words/s (baseline)"
-    );
-    println!(
-        "Multi-GPU sync:   {throughput2:.2} M words/s ({overhead_sync:+.1}% overhead)"
-    );
-    println!(
-        "Multi-GPU async:  {throughput3:.2} M words/s ({overhead_async:+.1}% overhead)"
-    );
+    println!("\nDirect GPU:       {throughput1:.2} M words/s (baseline)");
+    println!("Multi-GPU sync:   {throughput2:.2} M words/s ({overhead_sync:+.1}% overhead)");
+    println!("Multi-GPU async:  {throughput3:.2} M words/s ({overhead_async:+.1}% overhead)");
 
-    println!(
-        "\n❌ PROBLEM: Multi-GPU API should have <5% overhead, but has {overhead_sync:.1}%!"
-    );
+    println!("\n❌ PROBLEM: Multi-GPU API should have <5% overhead, but has {overhead_sync:.1}%!");
 
     Ok(())
 }

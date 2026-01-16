@@ -43,9 +43,7 @@ fn main() -> Result<()> {
         let gpu = GpuContext::with_device(device_id)?;
         let device_name = gpu.device_name()?;
         let (major, minor) = gpu.compute_capability();
-        println!(
-            "  Device {device_id}: {device_name} (sm_{major}{minor})"
-        );
+        println!("  Device {device_id}: {device_name} (sm_{major}{minor})");
     }
     println!();
 
@@ -148,9 +146,7 @@ fn main() -> Result<()> {
         println!("    ASYNC (optimized): {async_throughput:.2} M words/s");
         println!("  {}", "-".repeat(76));
         if improvement > 0.0 {
-            println!(
-                "    ✅ Improvement: +{improvement:.1}% ({speedup:.2}× speedup)"
-            );
+            println!("    ✅ Improvement: +{improvement:.1}% ({speedup:.2}× speedup)");
         } else {
             println!("    ⚠️  Regression: {improvement:.1}%");
         }

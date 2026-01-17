@@ -10,11 +10,11 @@ jobs:
   build_and_publish:
     uses: tehw0lf/workflows/.github/workflows/build-test-publish.yml@main
     permissions:
-      id-token: write       # Required for OIDC Trusted Publishing to crates.io
-      actions: write        # Required for workflow management
-      attestations: write   # Required for artifact attestation
-      contents: write       # Required for GitHub releases
-      packages: write       # Required for publishing
+      id-token: write # Required for OIDC Trusted Publishing to crates.io
+      actions: write # Required for workflow management
+      attestations: write # Required for artifact attestation
+      contents: write # Required for GitHub releases
+      packages: write # Required for publishing
       security-events: write # Required for SARIF uploads
     with:
       tool: cargo
@@ -26,8 +26,11 @@ jobs:
       enable_rustfmt: true
       enable_clippy: true
       clippy_args: "-- -D warnings"
-      # Skip tests - requires CUDA/GPU hardware not available in CI
-      test: "--version && echo 'Tests skipped - requires CUDA driver and GPU hardware'"
+      # Build without CUDA feature in CI (no GPU hardware available)
+      build_branch: "build --release --no-default-features"
+      build_main: "build --release --no-default-features"
+      # Skip CUDA tests in CI
+      test: "cargo test --no-default-features --lib"
 
       # Security scanning
       enable_security_scanning: "true"

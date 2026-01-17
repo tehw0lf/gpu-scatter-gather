@@ -31,14 +31,16 @@ path = "src/main.rs"
 [[bin]]
 name = "baseline_benchmark"
 path = "benches/scientific/baseline_benchmark.rs"
+required-features = ["cuda"]
 
 [[bin]]
 name = "validation_suite"
 path = "benches/scientific/validation_suite.rs"
+required-features = ["cuda"]
 
 [dependencies]
-# CUDA runtime bindings
-cuda-driver-sys = "0.3"
+# CUDA runtime bindings (optional - only needed for GPU acceleration)
+cuda-driver-sys = { version = "0.3", optional = true }
 # CLI argument parsing
 clap = { version = "4.5", features = ["derive"] }
 # Error handling
@@ -70,7 +72,8 @@ which = "6.0"
 cbindgen = "0.26"
 
 [features]
-default = []
+default = ["cuda"]  # Enable CUDA by default for users who install from source
+cuda = ["dep:cuda-driver-sys"]  # GPU acceleration support
 async = ["tokio"]
 network = ["async"]
 file = ["async"]

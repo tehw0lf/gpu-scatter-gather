@@ -1,15 +1,22 @@
+// Only import CUDA-related modules when cuda feature is enabled
+#[cfg(feature = "cuda")]
 use std::env;
+#[cfg(feature = "cuda")]
 use std::path::PathBuf;
+#[cfg(feature = "cuda")]
 use std::process::Command;
 
 fn main() {
-    // Generate C bindings
+    // Generate C bindings (only when cuda feature is enabled, as FFI requires CUDA)
+    #[cfg(feature = "cuda")]
     generate_c_bindings();
 
-    // Compile CUDA kernels
+    // Compile CUDA kernels (only when cuda feature is enabled)
+    #[cfg(feature = "cuda")]
     compile_cuda_kernels();
 }
 
+#[cfg(feature = "cuda")]
 fn generate_c_bindings() {
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
 
@@ -27,6 +34,7 @@ fn generate_c_bindings() {
     println!("cargo:rerun-if-changed=cbindgen.toml");
 }
 
+#[cfg(feature = "cuda")]
 fn compile_cuda_kernels() {
     println!("cargo:rerun-if-changed=kernels/wordlist_poc.cu");
 

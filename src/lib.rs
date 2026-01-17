@@ -43,11 +43,15 @@ pub mod keyspace;
 pub mod mask;
 pub mod transpose;
 
+// CUDA-dependent modules (only available with "cuda" feature)
+#[cfg(feature = "cuda")]
 pub mod gpu;
+#[cfg(feature = "cuda")]
 pub mod multigpu;
 
 pub mod bindings;
 
+#[cfg(feature = "cuda")]
 pub mod ffi;
 
 // Re-exports for convenience

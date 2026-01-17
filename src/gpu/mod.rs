@@ -4,6 +4,7 @@
 //! and batch generation logic.
 
 use anyhow::{Context, Result};
+#[cfg(feature = "cuda")]
 use cuda_driver_sys::*;
 use std::collections::HashMap;
 use std::ffi::CString;

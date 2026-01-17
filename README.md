@@ -69,12 +69,32 @@ cd gpu-scatter-gather
 
 # Build the project (compiles CUDA kernels automatically)
 cargo build --release
+
+# Or build without CUDA support (CPU-only reference implementation)
+cargo build --release --no-default-features
 ```
 
 **Prerequisites:**
 - **Rust 1.82+** - [Install Rust](https://rustup.rs/)
-- **CUDA Toolkit 11.8+** - [Download CUDA](https://developer.nvidia.com/cuda-downloads)
-- **NVIDIA GPU** with compute capability 7.5+ (Turing or newer)
+- **CUDA Toolkit 11.8+** (optional, for GPU acceleration) - [Download CUDA](https://developer.nvidia.com/cuda-downloads)
+- **NVIDIA GPU** with compute capability 7.5+ (Turing or newer) - optional for GPU features
+
+### Feature Flags
+
+This crate supports the following Cargo features:
+
+- **`cuda`** (enabled by default) - GPU acceleration support with CUDA
+  - Enables GPU-accelerated wordlist generation (365-771M words/s)
+  - Requires CUDA Toolkit 11.8+ and NVIDIA GPU
+  - Includes C FFI API for integration with hashcat/John the Ripper
+
+**Without GPU support:**
+```toml
+[dependencies]
+gpu-scatter-gather = { version = "1.7", default-features = false }
+```
+
+This provides CPU-only reference implementation for development/testing without GPU hardware.
 
 ## Features
 

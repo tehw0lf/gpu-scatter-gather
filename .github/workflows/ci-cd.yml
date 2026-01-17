@@ -30,7 +30,7 @@ jobs:
       build_branch: "build --release --no-default-features"
       build_main: "build --release --no-default-features"
       # Skip CUDA tests in CI
-      test: "cargo test --no-default-features --lib"
+      test: "test --no-default-features --lib"
 
       # Security scanning
       enable_security_scanning: "true"

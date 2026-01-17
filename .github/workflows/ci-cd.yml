@@ -26,6 +26,7 @@ jobs:
       enable_rustfmt: true
       enable_clippy: true
       clippy_args: "-- -D warnings"
+      skip_tests: true  # Tests require CUDA/GPU hardware not available in CI
 
       # Security scanning
       enable_security_scanning: "true"

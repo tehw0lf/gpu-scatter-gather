@@ -1,6 +1,6 @@
 [package]
 name = "gpu-scatter-gather"
-version = "1.7.1"
+version = "1.8.0"
 edition = "2021"
 authors = ["tehw0lf"]
 license = "MIT OR Apache-2.0"

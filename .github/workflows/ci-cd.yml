@@ -40,5 +40,4 @@ jobs:
       trivy_exit_code: "1"
 
       # GitHub release configuration
-      publish_github_release: ${{ startsWith(github.ref, 'refs/tags/v') && 'true' || 'false' }}
-      release_tag: ${{ github.ref_name }}
+      publish_github_release: "true"

@@ -16,6 +16,7 @@ jobs:
       contents: write # Required for GitHub releases
       packages: write # Required for publishing
       security-events: write # Required for SARIF uploads
+      pull-requests: write # Required for PR comments
     with:
       tool: cargo
       artifact_path: target/release/gpu-scatter-gather

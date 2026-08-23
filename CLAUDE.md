@@ -191,7 +191,7 @@ See `docs/README.md` for comprehensive documentation index.
 
 **Phase 2.7 Phase 2:** Device pointer API for zero-copy GPU operation
 - Expected: 800-1200 M words/s (2-3x improvement over Phase 1)
-- See `docs/NEXT_SESSION_PROMPT.md` for implementation plan
+- See `docs/development/DEVELOPMENT_STRATEGY_v1.1-v1.2.md` for the roadmap
 
 ### Performance Status
 
@@ -329,11 +329,10 @@ This project is being developed with academic publication in mind.
 
 Before starting new session:
 
-1. Read `docs/NEXT_SESSION_PROMPT.md`
-2. Review `docs/development/TODO.md` for current priorities
-3. Check `docs/development/DEVELOPMENT_LOG.md` for recent changes
-4. Run tests to verify current state
-5. Check git status for uncommitted work
+1. Check `docs/development/DEVELOPMENT_LOG.md` for recent changes
+2. Review `docs/development/DEVELOPMENT_STRATEGY_v1.1-v1.2.md` for current priorities
+3. Run tests to verify current state
+4. Check git status for uncommitted work
 
 ---
 

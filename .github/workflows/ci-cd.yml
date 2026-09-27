@@ -34,7 +34,6 @@ jobs:
       test: "test --no-default-features --lib"
 
       # Security scanning
-      enable_security_scanning: true
       semgrep_rules: "auto"
       trivy_severity: "MEDIUM,HIGH,CRITICAL"
       trivy_exit_code: 1

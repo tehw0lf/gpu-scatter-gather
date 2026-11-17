@@ -165,7 +165,7 @@ Benefits:
 **Artifacts:**
 - `src/keyspace.rs` - Core algorithm implementation
 - `tests/` - Comprehensive test coverage
-- `docs/FORMAL_SPECIFICATION.md` - Mathematical proofs
+- `docs/design/FORMAL_SPECIFICATION.md` - Mathematical proofs
 
 ---
 
@@ -194,7 +194,7 @@ Benefits:
 - `kernels/wordlist_poc.cu` - CUDA implementation
 - `src/gpu/` - Rust-CUDA integration
 - `examples/benchmark_production.rs` - Performance validation
-- `docs/PHASE2_RESULTS.md` - Benchmark documentation
+- `docs/archive/PHASE2_RESULTS.md` - Benchmark documentation
 
 ---
 
@@ -214,7 +214,7 @@ Benefits:
 **Key Milestone:** ✅ Formal mathematical proofs validate algorithm properties
 
 **Artifacts:**
-- `docs/FORMAL_SPECIFICATION.md` - Complete mathematical formalization
+- `docs/design/FORMAL_SPECIFICATION.md` - Complete mathematical formalization
 - Bijection, completeness, and ordering proofs
 - Complexity analysis (O(n·log m) time, O(n + Σ|Ci|) space)
 
@@ -237,8 +237,8 @@ Benefits:
 **Key Milestone:** ✅ 100% byte-for-byte match with maskprocessor, set equivalence with hashcat
 
 **Artifacts:**
-- `docs/CROSS_VALIDATION_RESULTS.md` - Empirical validation
-- `scripts/cross_validate.sh` - Automated validation scripts
+- `docs/validation/CROSS_VALIDATION_RESULTS.md` - Empirical validation
+- `examples/cross_validate.rs` - Automated cross-validation
 - Test outputs and diff results
 
 ---
@@ -264,8 +264,8 @@ Benefits:
 
 **Artifacts:**
 - `benches/scientific/` - Scientific benchmarking framework
-- `docs/STATISTICAL_VALIDATION.md` - Statistical analysis
-- `docs/BASELINE_BENCHMARKING_PLAN.md` - Methodology
+- `docs/validation/STATISTICAL_VALIDATION.md` - Statistical analysis
+- `docs/benchmarking/BASELINE_BENCHMARKING_PLAN.md` - Methodology
 - Performance results with 95% confidence intervals
 
 ---
@@ -288,8 +288,8 @@ Benefits:
 **Key Milestone:** ✅ Publication-ready validation package complete
 
 **Artifacts:**
-- `docs/PUBLICATION_GUIDE.md` - Comprehensive publication guide
-- `docs/DEVELOPMENT_PROCESS.md` - This document
+- `docs/guides/PUBLICATION_GUIDE.md` - Comprehensive publication guide
+- `docs/development/DEVELOPMENT_PROCESS.md` - This document
 - All validation artifacts and reproducibility package
 
 ---
@@ -785,12 +785,12 @@ All development artifacts are publicly available:
 - **Language:** Rust 1.82+ with CUDA 11.8+
 
 #### Documentation
-- `docs/FORMAL_SPECIFICATION.md` - Mathematical proofs
-- `docs/CROSS_VALIDATION_RESULTS.md` - Empirical validation
-- `docs/STATISTICAL_VALIDATION.md` - Statistical analysis
-- `docs/BASELINE_BENCHMARKING_PLAN.md` - Benchmark methodology
-- `docs/PUBLICATION_GUIDE.md` - Publication preparation
-- `docs/DEVELOPMENT_PROCESS.md` - This document
+- `docs/design/FORMAL_SPECIFICATION.md` - Mathematical proofs
+- `docs/validation/CROSS_VALIDATION_RESULTS.md` - Empirical validation
+- `docs/validation/STATISTICAL_VALIDATION.md` - Statistical analysis
+- `docs/benchmarking/BASELINE_BENCHMARKING_PLAN.md` - Benchmark methodology
+- `docs/guides/PUBLICATION_GUIDE.md` - Publication preparation
+- `docs/development/DEVELOPMENT_PROCESS.md` - This document
 
 #### Validation Data
 - `benches/scientific/results/` - Raw benchmark data
@@ -964,9 +964,9 @@ This methodology can serve as a template for future AI-assisted research project
 **Documentation:** `docs/` directory
 
 **For questions about:**
-- **Technical implementation:** See source code and `docs/FORMAL_SPECIFICATION.md`
-- **Validation methodology:** See `docs/CROSS_VALIDATION_RESULTS.md` and `docs/STATISTICAL_VALIDATION.md`
-- **Publication preparation:** See `docs/PUBLICATION_GUIDE.md`
+- **Technical implementation:** See source code and `docs/design/FORMAL_SPECIFICATION.md`
+- **Validation methodology:** See `docs/validation/CROSS_VALIDATION_RESULTS.md` and `docs/validation/STATISTICAL_VALIDATION.md`
+- **Publication preparation:** See `docs/guides/PUBLICATION_GUIDE.md`
 - **Development process:** This document
 
 ---

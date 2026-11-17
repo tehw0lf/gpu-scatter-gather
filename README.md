@@ -2,15 +2,15 @@
 
 **The world's fastest wordlist generator using GPU acceleration**
 
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![Crates.io](https://img.shields.io/crates/v/gpu-scatter-gather.svg)](https://crates.io/crates/gpu-scatter-gather)
 [![Rust](https://img.shields.io/badge/rust-1.82+-orange.svg)](https://www.rust-lang.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-11.8+-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
-[![Release](https://img.shields.io/badge/release-v1.7.0-brightgreen.svg)](https://github.com/tehw0lf/gpu-scatter-gather/releases/tag/v1.7.0)
+[![Release](https://img.shields.io/github/v/release/tehw0lf/gpu-scatter-gather?color=brightgreen)](https://github.com/tehw0lf/gpu-scatter-gather/releases/latest)
 
 > 📄 **[Read the Technical Whitepaper](https://github.com/tehw0lf/gpu-scatter-gather/releases/download/v1.0.0/GPU_Scatter_Gather_Whitepaper_v1.0.0.pdf)** - Comprehensive algorithm design, formal proofs, and performance evaluation
 >
-> ✅ **Status:** v1.7.0 Released - Published on [crates.io](https://crates.io/crates/gpu-scatter-gather)!
+> ✅ **Status:** Released - Published on [crates.io](https://crates.io/crates/gpu-scatter-gather)!
 >
 > Production-ready library with **4-15× speedup** over CPU tools (maskprocessor, cracken).
 > Complete C FFI API with 24 functions (17 single-GPU + 7 multi-GPU), 3 output formats, formal validation, and integration guides.
@@ -54,7 +54,7 @@ This enables:
 ```bash
 # Add to your Cargo.toml
 [dependencies]
-gpu-scatter-gather = "1.7"
+gpu-scatter-gather = "1.8"
 
 # Or install as command-line tool
 cargo install gpu-scatter-gather
@@ -91,14 +91,14 @@ This crate supports the following Cargo features:
 **Without GPU support:**
 ```toml
 [dependencies]
-gpu-scatter-gather = { version = "1.7", default-features = false }
+gpu-scatter-gather = { version = "1.8", default-features = false }
 ```
 
 This provides CPU-only reference implementation for development/testing without GPU hardware.
 
 ## Features
 
-### Current Release: v1.7.0 ✅ (Published on crates.io)
+### Current Release ✅ (Published on crates.io)
 
 **Core Features (Production Ready)**:
 - ✅ **High-performance GPU kernel** - 365-771M words/s (varies by password length)

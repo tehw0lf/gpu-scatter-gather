@@ -329,9 +329,9 @@ This progression demonstrates:
    - `benches/scientific/results/validation_2025-11-09.json`
 
 3. **Validation Artifacts**
-   - `docs/FORMAL_SPECIFICATION.md`
-   - `docs/CROSS_VALIDATION_RESULTS.md`
-   - `docs/STATISTICAL_VALIDATION.md`
+   - `docs/design/FORMAL_SPECIFICATION.md`
+   - `docs/validation/CROSS_VALIDATION_RESULTS.md`
+   - `docs/validation/STATISTICAL_VALIDATION.md`
    - Test scripts and automation
 
 4. **Benchmark Scripts**
@@ -626,7 +626,7 @@ The human provided strategic oversight and executed validation, not line-by-line
 - **Primary Contact:** tehw0lf
 - **Project Repository:** [GitHub URL]
 - **Documentation:** All in `docs/` directory
-- **AI Methodology:** See `docs/DEVELOPMENT_PROCESS.md`
+- **AI Methodology:** See `docs/development/DEVELOPMENT_PROCESS.md`
 
 ### Collaboration Opportunities
 
@@ -643,11 +643,11 @@ We welcome collaboration on:
 
 ### Reference Documentation
 
-- `docs/FORMAL_SPECIFICATION.md` - Mathematical foundations
-- `docs/BASELINE_BENCHMARKING_PLAN.md` - Benchmarking methodology
-- `docs/CROSS_VALIDATION_RESULTS.md` - Empirical validation
-- `docs/STATISTICAL_VALIDATION.md` - Distributional analysis
-- `docs/DEVELOPMENT_LOG.md` - Implementation history
+- `docs/design/FORMAL_SPECIFICATION.md` - Mathematical foundations
+- `docs/benchmarking/BASELINE_BENCHMARKING_PLAN.md` - Benchmarking methodology
+- `docs/validation/CROSS_VALIDATION_RESULTS.md` - Empirical validation
+- `docs/validation/STATISTICAL_VALIDATION.md` - Distributional analysis
+- `docs/development/DEVELOPMENT_LOG.md` - Implementation history
 
 ### External References
 

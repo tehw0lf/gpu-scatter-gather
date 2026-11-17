@@ -456,4 +456,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 ---
 
 *Last Updated: November 23, 2025*
-*Version: 1.3.0-dev*

@@ -281,4 +281,3 @@ fn main() -> anyhow::Result<()> {
 ---
 
 *Last Updated: November 23, 2025*
-*Version: 1.3.0-dev*

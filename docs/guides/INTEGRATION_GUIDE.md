@@ -753,7 +753,7 @@ nvidia-smi
 
 ## Next Steps
 
-1. **Review API specification**: `docs/C_API_SPECIFICATION.md`
+1. **Review API specification**: `docs/api/C_API_SPECIFICATION.md`
 2. **Study examples**: `examples/c_api_*.c`
 3. **Test integration**: Build simple test program
 4. **Profile performance**: Measure throughput improvements

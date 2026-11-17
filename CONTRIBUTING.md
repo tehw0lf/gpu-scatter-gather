@@ -48,7 +48,7 @@ cargo build --release
 cargo test
 
 # Run FFI integration tests
-gcc -o test_ffi_integration_simple tests/ffi_integration_test_simple.c \
+gcc -o test_ffi_integration_simple tests/ffi_integration_simple.c \
     -I. -L./target/release -lgpu_scatter_gather \
     -Wl,-rpath,./target/release
 ./test_ffi_integration_simple
@@ -270,10 +270,10 @@ All changes to core algorithm or output must pass:
 
 ```bash
 # Cross-validation with maskprocessor
-cargo run --release --example validate_correctness
+cargo run --release --example cross_validate
 
-# Statistical validation
-cargo run --release --example statistical_validation
+# GPU output vs CPU reference
+cargo run --release --example validate_gpu
 ```
 
 ## Documentation

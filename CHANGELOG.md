@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-11-17
+
+### Changed
+- CI: grant `issues: write` to the reusable workflow caller so the scan failure issue job can run
+- CI: drop the removed `enable_security_scanning` input and pass boolean and number workflow inputs unquoted
+- CI: add `pull-requests: write` permission to the workflow
+- Bump the `cargo` dependency group
+- Docs: drop references to deleted planning documents
+
+### Fixed
+- `clippy::needless_range_loop` in a multi-GPU unit test, which failed the lint step with `--all-targets --all-features`
+
+## [1.8.2] - 2026-03-14
+
+### Removed
+- Outdated `TODO.md` (project complete at v1.8.1)
+
+## [1.8.1] - 2026-03-12
+
+### Changed
+- Release version bump; releases are versioned automatically by CI from the manifest version
+
+## [1.8.0] - 2026-03-12
+
+### Changed
+- CI/CD: build process and CUDA documentation, test command for runners without a GPU, `cargo publish` flags for `--no-default-features`
+- Migrate to automatic semver release versioning
+
+### Fixed
+- Resolve the CUDA kernel directory at runtime instead of compile time (`option_env!` in the proof-of-concept examples)
+- Remaining clippy lints in examples, benches and `not_unsafe_ptr_arg_deref`
+
 ## [1.7.1] - 2026-01-16
 
 ### Code Quality Improvements

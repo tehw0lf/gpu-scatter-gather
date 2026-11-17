@@ -186,9 +186,8 @@ Patterns are chosen to test different aspects:
 
 ## References
 
-- [BASELINE_BENCHMARKING_PLAN.md](../../docs/BASELINE_BENCHMARKING_PLAN.md) - Full implementation plan
-- [FORMAL_SPECIFICATION.md](../../docs/FORMAL_SPECIFICATION.md) - Mathematical foundations
-- [TODO.md](../../docs/TODO.md) - Project roadmap
+- [BASELINE_BENCHMARKING_PLAN.md](../../docs/benchmarking/BASELINE_BENCHMARKING_PLAN.md) - Full implementation plan
+- [FORMAL_SPECIFICATION.md](../../docs/design/FORMAL_SPECIFICATION.md) - Mathematical foundations
 
 ## Contributing
 

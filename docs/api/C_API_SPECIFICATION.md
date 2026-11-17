@@ -19,7 +19,7 @@
 
 **Total Implemented**: 24 functions (17 single-GPU + 7 multi-GPU)
 **Test Coverage**: 20/20 tests passing (16 single-GPU + 4 multi-GPU)
-**Documentation**: Complete (see docs/api/PHASE*_SUMMARY.md)
+**Documentation**: Complete (see docs/archive/PHASE*_SUMMARY.md)
 
 🎉 **LIBRARY FEATURE-COMPLETE WITH MULTI-GPU SUPPORT** 🎉
 
@@ -34,6 +34,18 @@ This document specifies the complete C API for `libwordlist_generator`, a high-p
 ## Header File
 
 **Location**: `include/wordlist_generator.h`
+
+> **The generated header is authoritative.** `include/wordlist_generator.h` is produced by cbindgen from `src/ffi.rs`, and its names differ from the listing below in these ways:
+>
+> | This specification | Generated header |
+> |---|---|
+> | `wg_handle_t` | `struct wg_WordlistGenerator *` |
+> | `wg_multigpu_handle_t` | `struct wg_MultiGpuGenerator *` |
+> | `wg_batch_device_t` | `struct wg_BatchDevice` |
+> | `WG_SUCCESS`, `WG_ERROR_*`, `WG_FORMAT_*` | `wg_WG_SUCCESS`, `wg_WG_ERROR_*`, `wg_WG_FORMAT_*` (cbindgen prefixes macros too) |
+> | `char *` output buffers | `uint8_t *` |
+>
+> To use the unprefixed constant names, add a shim after including the header, for example `#define WG_SUCCESS wg_WG_SUCCESS` (as `tests/test_device_enumeration.c` does). The listing below shows the unprefixed names for readability.
 
 ```c
 #ifndef WORDLIST_GENERATOR_H
@@ -195,9 +207,9 @@ int wg_set_mask(
  * @note Format affects stride and buffer size calculations
  *
  * Example:
- *   wg_set_output_format(gen, WG_FORMAT_FIXED_WIDTH);
+ *   wg_set_format(gen, WG_FORMAT_FIXED_WIDTH);
  */
-int wg_set_output_format(
+int wg_set_format(
     wg_handle_t gen,
     wg_output_format_t format
 );
@@ -222,29 +234,6 @@ int wg_set_output_format(
  *   printf("Keyspace: %llu candidates\n", total);
  */
 uint64_t wg_keyspace_size(wg_handle_t gen);
-
-/**
- * Convert word to its index (reverse lookup)
- *
- * @param gen Generator handle
- * @param word Word to look up
- * @param word_len Length of word
- * @return Index if valid, UINT64_MAX if not in keyspace
- *
- * @note Useful for checking if word matches mask
- * @note Word must exactly match mask pattern
- *
- * Example:
- *   uint64_t idx = wg_word_to_index(gen, "pass1234", 8);
- *   if (idx != UINT64_MAX) {
- *       printf("Word is candidate #%llu\n", idx);
- *   }
- */
-uint64_t wg_word_to_index(
-    wg_handle_t gen,
-    const char* word,
-    size_t word_len
-);
 
 /**
  * Calculate required buffer size for host generation
@@ -423,26 +412,6 @@ int wg_generate_batch_stream(
  */
 const char* wg_get_error(wg_handle_t gen);
 
-/**
- * Get CUDA device properties
- *
- * @param gen Generator handle
- * @param prop [out] CUDA device properties
- * @return WG_SUCCESS or error code
- *
- * @note Useful for checking GPU capabilities
- *
- * Example:
- *   CUdevprop prop;
- *   if (wg_get_device_properties(gen, &prop) == WG_SUCCESS) {
- *       printf("GPU: %s\n", prop.name);
- *   }
- */
-int wg_get_device_properties(
-    wg_handle_t gen,
-    CUdevprop* prop
-);
-
 /*
  * ===========================================================================
  * Utility Functions
@@ -452,16 +421,12 @@ int wg_get_device_properties(
 /**
  * Get library version
  *
- * @param major [out] Major version
- * @param minor [out] Minor version
- * @param patch [out] Patch version
+ * @return Static version string (e.g. "1.8.4"); never NULL, do not free
  *
  * Example:
- *   int major, minor, patch;
- *   wg_get_version(&major, &minor, &patch);
- *   printf("libwordlist_generator v%d.%d.%d\n", major, minor, patch);
+ *   printf("libwordlist_generator v%s\n", wg_get_version());
  */
-void wg_get_version(int* major, int* minor, int* patch);
+const char* wg_get_version(void);
 
 /**
  * Check if CUDA is available
@@ -610,7 +575,7 @@ int main() {
     wg_set_charset(gen, 1, "abcdefghijklmnopqrstuvwxyz0123456789", 36);
     int mask[] = {1,1,1,1,1,1,1,1};
     wg_set_mask(gen, mask, 8);
-    wg_set_output_format(gen, WG_FORMAT_FIXED_WIDTH);
+    wg_set_format(gen, WG_FORMAT_FIXED_WIDTH);
 
     // Allocate hash output
     CUdeviceptr d_hashes;
@@ -850,13 +815,13 @@ wg_generate_batch_device(gen, 0, 100000000, &batch);  // GOOD: 100M candidates
 
 ```c
 // Use FIXED_WIDTH for hash kernels (aligned access)
-wg_set_output_format(gen, WG_FORMAT_FIXED_WIDTH);
+wg_set_format(gen, WG_FORMAT_FIXED_WIDTH);
 
 // Use NEWLINES for file output / piping
-wg_set_output_format(gen, WG_FORMAT_NEWLINES);
+wg_set_format(gen, WG_FORMAT_NEWLINES);
 
 // Use PACKED for maximum throughput
-wg_set_output_format(gen, WG_FORMAT_PACKED);
+wg_set_format(gen, WG_FORMAT_PACKED);
 ```
 
 ---

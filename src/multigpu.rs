@@ -1703,8 +1703,8 @@ mod tests {
 
                 // All GPUs: 400M words/s
                 for _ in 0..3 {
-                    for i in 0..3 {
-                        ctx.gpu_stats[i].record_completion(Duration::from_secs(1), 400_000_000);
+                    for stats in ctx.gpu_stats.iter_mut().take(3) {
+                        stats.record_completion(Duration::from_secs(1), 400_000_000);
                     }
                 }
 

@@ -6,6 +6,9 @@
 
 ---
 
+> **Design document.** This describes the intended library design. Some names differ from what shipped, for example `wg_set_output_format` became `wg_set_format`, and `wg_word_to_index` and `wg_get_device_properties` were not implemented. The shipped interface is documented in [`docs/api/C_API_SPECIFICATION.md`](../api/C_API_SPECIFICATION.md).
+
+
 ## Table of Contents
 
 1. [Executive Summary](#executive-summary)

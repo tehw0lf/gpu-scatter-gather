@@ -502,7 +502,7 @@ int main(int argc, char **argv) {
     wg_set_charset(gen, 1, "abcdefghijklmnopqrstuvwxyz0123456789", 36);
     int mask[] = {1,1,1,1,1,1,1,1};
     wg_set_mask(gen, mask, 8);
-    wg_set_output_format(gen, WG_FORMAT_FIXED_WIDTH);
+    wg_set_format(gen, WG_FORMAT_FIXED_WIDTH);
 
     // Allocate result flag on GPU
     CUdeviceptr d_target, d_found_idx;
@@ -611,17 +611,17 @@ for (int i = 0; i < 4; i++) {
 
 ```c
 // For hash kernels expecting fixed-size input
-wg_set_output_format(gen, WG_FORMAT_FIXED_WIDTH);
+wg_set_format(gen, WG_FORMAT_FIXED_WIDTH);
 // Pros: Aligned access, predictable stride
 // Best for: MD5, SHA1, bcrypt, etc.
 
 // For maximum throughput
-wg_set_output_format(gen, WG_FORMAT_PACKED);
+wg_set_format(gen, WG_FORMAT_PACKED);
 // Pros: Minimal memory, cache-friendly
 // Best for: Custom parsers
 
 // For compatibility
-wg_set_output_format(gen, WG_FORMAT_NEWLINES);
+wg_set_format(gen, WG_FORMAT_NEWLINES);
 // Pros: Human-readable, standard
 // Best for: Debugging, piping to stdin
 ```

@@ -11,13 +11,13 @@
 | Phase | Status | Functions | Description |
 |-------|--------|-----------|-------------|
 | **Phase 1** | ✅ **COMPLETE** | 8 functions | Host memory API (baseline) |
-| **Phase 2** | ✅ **COMPLETE** | 3 functions | Device pointer API (zero-copy) |
+| **Phase 2** | ✅ **COMPLETE** | 2 functions | Device pointer API (zero-copy) |
 | **Phase 3** | ✅ **COMPLETE** | 1 function | Output format modes |
 | **Phase 4** | ✅ **COMPLETE** | 1 function | Streaming API (async) |
 | **Phase 5** | ✅ **COMPLETE** | 4 functions | Utility functions (includes device enumeration) |
-| **Multi-GPU** | ✅ **COMPLETE** | 7 functions | Multi-GPU parallel generation (v1.1.0) |
+| **Multi-GPU** | ✅ **COMPLETE** | 8 functions | Multi-GPU parallel generation (v1.1.0) |
 
-**Total Implemented**: 24 functions (17 single-GPU + 7 multi-GPU)
+**Total Implemented**: 24 functions (16 single-GPU + 8 multi-GPU)
 **Test Coverage**: 20/20 tests passing (16 single-GPU + 4 multi-GPU)
 **Documentation**: Complete (see docs/archive/PHASE*_SUMMARY.md)
 
@@ -35,7 +35,7 @@ This document specifies the complete C API for `libwordlist_generator`, a high-p
 
 **Location**: `include/wordlist_generator.h`
 
-> **The generated header is authoritative.** `include/wordlist_generator.h` is produced by cbindgen from `src/ffi.rs`, and its names differ from the listing below in these ways:
+> **The generated header is authoritative.** `include/wordlist_generator.h` is produced by cbindgen from `src/ffi.rs`. The function names in the listing below match it; the main differences in types and constants are:
 >
 > | This specification | Generated header |
 > |---|---|
@@ -43,9 +43,13 @@ This document specifies the complete C API for `libwordlist_generator`, a high-p
 > | `wg_multigpu_handle_t` | `struct wg_MultiGpuGenerator *` |
 > | `wg_batch_device_t` | `struct wg_BatchDevice` |
 > | `WG_SUCCESS`, `WG_ERROR_*`, `WG_FORMAT_*` | `wg_WG_SUCCESS`, `wg_WG_ERROR_*`, `wg_WG_FORMAT_*` (cbindgen prefixes macros too) |
-> | `char *` output buffers | `uint8_t *` |
+> | `wg_output_format_t`, `wg_error_t` | not defined; formats are `int32_t` and functions return `int32_t` codes |
+| `CUstream` (in `wg_generate_batch_stream`) | `wg_CUstream`, which is not defined anywhere (see below) |
+| `CUcontext` (in `wg_create`) | `void *` |
+| `CUdeviceptr` (in `wg_batch_device_t`) | `uint64_t` |
+| `char *` output buffers | `uint8_t *` |
 >
-> To use the unprefixed constant names, add a shim after including the header, for example `#define WG_SUCCESS wg_WG_SUCCESS` (as `tests/test_device_enumeration.c` does). The listing below shows the unprefixed names for readability.
+> To use the unprefixed constant names, add a shim after including the header, for example `#define WG_SUCCESS wg_WG_SUCCESS` (as `tests/test_device_enumeration.c` does). The generated header also does not compile as is, because `wg_CUstream` is never defined; add `#define wg_CUstream CUstream` before including it. The listing below shows the unprefixed names for readability.
 
 ```c
 #ifndef WORDLIST_GENERATOR_H
@@ -421,7 +425,9 @@ const char* wg_get_error(wg_handle_t gen);
 /**
  * Get library version
  *
- * @return Static version string (e.g. "1.8.4"); never NULL, do not free
+ * @return Static NUL-terminated string; never NULL, do not free
+ *
+ * @note The string is currently a fixed value and does not track the crate version
  *
  * Example:
  *   printf("libwordlist_generator v%s\n", wg_get_version());

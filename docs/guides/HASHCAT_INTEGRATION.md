@@ -10,14 +10,14 @@
 >
 > | In this guide | In the shipped API |
 > |---|---|
-> | `wg_create()`, `wg_create_with_context(ctx)` | `wg_create(ctx, device_id)`; pass `NULL` as `ctx` to create a context |
+> | `wg_create()`, `wg_create_with_context(ctx)` | `wg_create(ctx, device_id)`, which currently ignores both arguments: it always creates its own context on device 0, so there is no shipped equivalent of sharing an existing context |
 > | `wg_add_charset(gen, id, chars, len)` | `wg_set_charset(gen, id, chars, len)`, with `id` in 1 to 255 |
 > | `wg_set_mask(gen, "?l?l?d")` (string mask) | `wg_set_mask(gen, const int32_t *mask, int32_t length)`: an array of charset ids, one per position; the caller parses mask strings |
 > | `wg_word_length(gen)` | not available; the word length is the mask length you passed to `wg_set_mask` |
 > | `wg_generate_batch_host(...) != 0` as the error check | returns the number of bytes written, or a negative error code |
 > | `WG_SUCCESS`, `WG_FORMAT_*` | `wg_WG_SUCCESS`, `wg_WG_FORMAT_*` in the generated header |
 >
-> The specification in [`docs/api/C_API_SPECIFICATION.md`](../api/C_API_SPECIFICATION.md) and the working example `tests/ffi_integration_simple.c` describe the actual interface.
+> The specification in [`docs/api/C_API_SPECIFICATION.md`](../api/C_API_SPECIFICATION.md) and the example `tests/ffi_integration_simple.c` describe the actual interface. The example compiles against the generated header only with `-Dwg_CUstream=CUstream` (see the note in the specification).
 
 
 ## Table of Contents

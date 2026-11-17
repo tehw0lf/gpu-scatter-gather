@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.8.5] - 2026-11-18
 
 ### Changed
-- Docs: the C API specification now matches the generated header (`wg_set_format`, `wg_get_version` signature, header type and constant names); `wg_word_to_index` and `wg_get_device_properties`, which were never implemented, are removed from it
+- Docs: the C API specification lists the shipped function names (`wg_set_format`, the `wg_get_version` signature) and documents the main type and constant differences from the generated header; `wg_word_to_index` and `wg_get_device_properties`, which were never implemented, are removed from it
 - Docs: the JtR and hashcat integration guides and the library architecture document are marked as illustrative or design-level, with the differences from the shipped API listed
 
 ## [1.8.4] - 2026-11-17

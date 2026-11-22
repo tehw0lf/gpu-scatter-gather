@@ -17,7 +17,7 @@
 > | `wg_generate_batch_host(...) != 0` as the error check | returns the number of bytes written, or a negative error code |
 > | `WG_SUCCESS`, `WG_FORMAT_*` | `wg_WG_SUCCESS`, `wg_WG_FORMAT_*` in the generated header |
 >
-> The specification in [`docs/api/C_API_SPECIFICATION.md`](../api/C_API_SPECIFICATION.md) and the example `tests/ffi_integration_simple.c` describe the actual interface. The example compiles against the generated header only with `-Dwg_CUstream=CUstream` (see the note in the specification).
+> The specification in [`docs/api/C_API_SPECIFICATION.md`](../api/C_API_SPECIFICATION.md) and the example `tests/ffi_integration_simple.c` describe the actual interface.
 
 
 ## Table of Contents

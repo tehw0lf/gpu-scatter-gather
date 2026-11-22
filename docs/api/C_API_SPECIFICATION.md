@@ -44,12 +44,11 @@ This document specifies the complete C API for `libwordlist_generator`, a high-p
 > | `wg_batch_device_t` | `struct wg_BatchDevice` |
 > | `WG_SUCCESS`, `WG_ERROR_*`, `WG_FORMAT_*` | `wg_WG_SUCCESS`, `wg_WG_ERROR_*`, `wg_WG_FORMAT_*` (cbindgen prefixes macros too) |
 > | `wg_output_format_t`, `wg_error_t` | not defined; formats are `int32_t` and functions return `int32_t` codes |
-> | `CUstream` (in `wg_generate_batch_stream`) | `wg_CUstream`, which is not defined anywhere (see below) |
 > | `CUcontext` (in `wg_create`) | `void *` |
 > | `CUdeviceptr` (in `wg_batch_device_t`) | `uint64_t` |
 > | `char *` output buffers | `uint8_t *` |
 >
-> To use the unprefixed constant names, add a shim after including the header, for example `#define WG_SUCCESS wg_WG_SUCCESS` (as `tests/test_device_enumeration.c` does). The generated header also does not compile as is, because `wg_CUstream` is never defined; add `#define wg_CUstream CUstream` before including it. The listing below shows the unprefixed names for readability.
+> To use the unprefixed constant names, add a shim after including the header, for example `#define WG_SUCCESS wg_WG_SUCCESS` (as `tests/test_device_enumeration.c` does). The listing below shows the unprefixed names for readability.
 
 ```c
 #ifndef WORDLIST_GENERATOR_H

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.6] - 2026-11-22
+
+### Fixed
+- The generated C header declares `CUstream` unprefixed in `wg_generate_batch_stream`, so it compiles together with `cuda.h` without a `wg_CUstream` shim; the documentation no longer asks for one
+
 ## [1.8.5] - 2026-11-18
 
 ### Changed

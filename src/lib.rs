@@ -229,6 +229,9 @@ mod tests {
             !header.contains("wg_CU"),
             "excluded CUDA types must keep their cuda.h names"
         );
-        assert!(header.contains("CUstream stream"));
+        assert!(
+            header.lines().any(|l| l.trim() == "CUstream stream,"),
+            "the stream parameter must be declared with the cuda.h type"
+        );
     }
 }

@@ -221,4 +221,14 @@ mod tests {
 
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_c_header_uses_unprefixed_cuda_stream() {
+        let header = include_str!("../include/wordlist_generator.h");
+        assert!(
+            !header.contains("wg_CU"),
+            "excluded CUDA types must keep their cuda.h names"
+        );
+        assert!(header.contains("CUstream stream"));
+    }
 }

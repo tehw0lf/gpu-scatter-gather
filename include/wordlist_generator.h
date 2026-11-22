@@ -248,7 +248,7 @@ void wg_free_batch_device(struct wg_WordlistGenerator *gen, struct wg_BatchDevic
  * ```
  */
 int32_t wg_generate_batch_stream(struct wg_WordlistGenerator *gen,
-                                 wg_CUstream stream,
+                                 CUstream stream,
                                  uint64_t start_idx,
                                  uint64_t count,
                                  struct wg_BatchDevice *batch);

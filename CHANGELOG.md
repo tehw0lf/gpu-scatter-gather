@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.7] - 2026-11-23
+
+### Fixed
+- `wg_get_version` returns the crate version instead of a hard-coded `0.1.0`
+
 ## [1.8.6] - 2026-11-22
 
 ### Fixed

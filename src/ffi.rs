@@ -717,7 +717,8 @@ pub extern "C" fn wg_generate_batch_stream(
 /// This function never fails and always returns a valid pointer.
 ///
 /// # Returns
-/// Pointer to static version string (e.g., "0.1.0")
+/// Pointer to static NUL-terminated version string: the crate version from
+/// `Cargo.toml` at build time (e.g., "1.2.3")
 ///
 /// # Example
 /// ```c
@@ -726,8 +727,7 @@ pub extern "C" fn wg_generate_batch_stream(
 /// ```
 #[no_mangle]
 pub extern "C" fn wg_get_version() -> *const c_char {
-    // Static version string from Cargo.toml
-    const VERSION: &[u8] = b"0.1.0\0";
+    const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "\0");
     VERSION.as_ptr() as *const c_char
 }
 
@@ -1290,5 +1290,19 @@ pub extern "C" fn wg_multigpu_destroy(gen: *mut MultiGpuGenerator) {
     unsafe {
         let _ = Box::from_raw(gen as *mut MultiGpuGeneratorInternal);
         // Box drop automatically frees everything
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CStr;
+
+    #[test]
+    fn wg_get_version_returns_crate_version() {
+        let ptr = wg_get_version();
+        assert!(!ptr.is_null());
+        let version = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        assert_eq!(version, env!("CARGO_PKG_VERSION"));
     }
 }

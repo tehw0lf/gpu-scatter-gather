@@ -260,7 +260,8 @@ int32_t wg_generate_batch_stream(struct wg_WordlistGenerator *gen,
  * This function never fails and always returns a valid pointer.
  *
  * # Returns
- * Pointer to static version string (e.g., "0.1.0")
+ * Pointer to static NUL-terminated version string: the crate version from
+ * `Cargo.toml` at build time (e.g., "1.2.3")
  *
  * # Example
  * ```c

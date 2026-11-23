@@ -426,7 +426,7 @@ const char* wg_get_error(wg_handle_t gen);
  *
  * @return Static NUL-terminated string; never NULL, do not free
  *
- * @note The string is currently a fixed value and does not track the crate version
+ * @note The string is the library's crate version (`version` in `Cargo.toml`) at build time
  *
  * Example:
  *   printf("libwordlist_generator v%s\n", wg_get_version());

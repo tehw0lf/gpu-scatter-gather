@@ -118,11 +118,14 @@ typedef struct {
  * Create a new wordlist generator instance
  *
  * @param ctx CUDA context to use (NULL = create new context)
- * @param device_id CUDA device ID (e.g., 0 for first GPU)
+ * @param device_id CUDA device ID (0 to wg_get_device_count() - 1); ignored if ctx is provided
  * @return Generator handle, or NULL on error
  *
- * @note If ctx is NULL, library creates and owns context
- * @note If ctx is provided, caller must keep context alive
+ * @note If ctx is NULL, library creates and owns a context on device_id; it stays current on the calling thread
+ * @note If ctx is NULL and device_id is invalid, returns NULL (see wg_get_error)
+ * @note If ctx is provided, device_id is ignored and the device is taken from ctx
+ * @note If ctx is provided, caller must keep context alive; the library never destroys it
+ * @note If ctx is provided, batches are allocated in ctx and the caller's current context is restored after each call
  *
  * Example:
  *   wg_handle_t gen = wg_create(NULL, 0);
@@ -586,7 +589,7 @@ int main() {
     CUdeviceptr d_hashes;
     cuMemAlloc(&d_hashes, 100000000 * 16);
 
-    // Generate on GPU
+    // Generate on GPU (batch.data lives in `context`, the context passed to wg_create)
     wg_batch_device_t batch;
     wg_generate_batch_device(gen, 0, 100000000, &batch);
 

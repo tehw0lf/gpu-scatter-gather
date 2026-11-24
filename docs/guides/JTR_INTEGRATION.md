@@ -10,7 +10,7 @@
 >
 > | In this guide | In the shipped API |
 > |---|---|
-> | `wg_create()`, `wg_create_with_context(ctx)` | `wg_create(ctx, device_id)`, which currently ignores both arguments: it always creates its own context on device 0, so there is no shipped equivalent of sharing an existing context |
+> | `wg_create()`, `wg_create_with_context(ctx)` | `wg_create(ctx, device_id)`: a non-NULL `ctx` is shared (the shipped equivalent of `wg_create_with_context(ctx)`), a NULL `ctx` creates a context on `device_id` |
 > | `wg_add_charset(gen, id, chars, len)` | `wg_set_charset(gen, id, chars, len)`, with `id` in 1 to 255 |
 > | `wg_set_mask(gen, "?l?l?d")` (string mask) | `wg_set_mask(gen, const int32_t *mask, int32_t length)`: an array of charset ids, one per position; the caller parses mask strings |
 > | `wg_word_length(gen)` | not available; the word length is the mask length you passed to `wg_set_mask` |

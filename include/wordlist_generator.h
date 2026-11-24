@@ -86,13 +86,22 @@ typedef struct wg_MultiGpuGenerator {
  * Create a new wordlist generator
  *
  * # Arguments
- * * `ctx` - CUDA context (NULL to create new, non-NULL to use existing)
- * * `device_id` - CUDA device ID (0 for first GPU, ignored if ctx provided)
+ * * `ctx` - CUDA context (NULL to create a new one, non-NULL to use an existing one)
+ * * `device_id` - CUDA device ID (0 to `wg_get_device_count() - 1`); ignored if `ctx` is provided
+ *
+ * With `ctx` NULL the generator creates and owns a context on `device_id`.
+ * An invalid `device_id` returns NULL and sets the error (see `wg_get_error`).
+ * The new context stays current on the calling thread.
+ *
+ * With a non-NULL `ctx` the generator loads its kernels into that context and
+ * allocates its batches in it. `ctx` must be a valid `CUcontext` that outlives
+ * the generator. The caller's current context is restored after each call,
+ * and `wg_destroy` does not destroy `ctx`.
  *
  * # Returns
  * Generator handle, or NULL on error
  */
-struct wg_WordlistGenerator *wg_create(void *ctx, int32_t _device_id);
+struct wg_WordlistGenerator *wg_create(void *ctx, int32_t device_id);
 
 /**
  * Destroy generator and free all resources

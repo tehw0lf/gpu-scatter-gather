@@ -415,7 +415,7 @@ __global__ void generate_words_columnmajor_kernel(
 
 ### 5.3 C FFI API
 
-> **Sketch of the v1.0.0 interface, not the shipped API.** The C interface in this section, the C snippets in section 9.1 and Appendix C (`wg_generate`, `wg_generate_device`, `wg_generate_stream`, `wg_version`, `wg_handle_t`, `wg_output_format_t`, `wg_stream_callback_t` and the `wg_create(const char* mask, ...)` signature) do not match `include/wordlist_generator.h`. The specification in [`docs/api/C_API_SPECIFICATION.md`](api/C_API_SPECIFICATION.md) describes the actual interface.
+> **Sketch of the v1.0.0 interface, not the shipped API.** The C interface in this section and in section 5.4, the C snippets in section 9.1 and Appendix C (`wg_generate`, `wg_generate_device`, `wg_generate_stream`, `wg_version`, `wg_handle_t`, `wg_output_format_t`, `wg_stream_callback_t` and the `wg_create(const char* mask, ...)` signature, and the header name `gpu_scatter_gather.h` in Appendix C) do not match `include/wordlist_generator.h`. The specification in [`docs/api/C_API_SPECIFICATION.md`](api/C_API_SPECIFICATION.md) describes the actual interface.
 
 **16 functions across 5 phases:**
 

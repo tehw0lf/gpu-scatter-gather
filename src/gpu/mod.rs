@@ -13,6 +13,8 @@ use std::ptr;
 /// GPU context for wordlist generation
 pub struct GpuContext {
     context: CUcontext,
+    /// Whether `Drop` destroys `context` (false for a context borrowed from the caller)
+    owns_context: bool,
     module: CUmodule,
     kernel: CUfunction,
     kernel_transposed: CUfunction,
@@ -55,6 +57,79 @@ impl GpuContext {
             check_cuda(cuDeviceGet(&mut device, device_id))
                 .with_context(|| format!("Failed to get CUDA device {device_id}"))?;
 
+            // Create context (also makes it current on the calling thread)
+            let mut context = ptr::null_mut();
+            check_cuda(cuCtxCreate_v2(&mut context, 0, device))
+                .context("Failed to create CUDA context")?;
+
+            match Self::load_module(context, device, device_id, true) {
+                Ok(gpu) => Ok(gpu),
+                Err(e) => {
+                    let _ = cuCtxDestroy_v2(context);
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Create a generator inside a context that the caller owns
+    ///
+    /// The kernel module is loaded into `context` and every allocation of this
+    /// generator is made in it. The device is derived from the context. The
+    /// calling thread's current context is left as it was found, and
+    /// `context` is never destroyed by this generator.
+    ///
+    /// # Safety
+    /// `context` must be a valid `CUcontext` that stays alive for as long as
+    /// the returned `GpuContext`. A NULL context is rejected with an error.
+    pub unsafe fn from_existing(context: CUcontext) -> Result<Self> {
+        if context.is_null() {
+            anyhow::bail!("CUDA context must not be NULL");
+        }
+        unsafe {
+            check_cuda(cuInit(0)).context("Failed to initialize CUDA")?;
+
+            let _guard = ContextGuard::push(context)?;
+
+            let mut device: CUdevice = 0;
+            check_cuda(cuCtxGetDevice(&mut device))
+                .context("Failed to get the device of the CUDA context")?;
+
+            // Find the ordinal of that device
+            let mut device_count = 0;
+            check_cuda(cuDeviceGetCount(&mut device_count))
+                .context("Failed to get device count")?;
+            let mut device_id = None;
+            for ordinal in 0..device_count {
+                let mut candidate: CUdevice = 0;
+                check_cuda(cuDeviceGet(&mut candidate, ordinal))
+                    .with_context(|| format!("Failed to get CUDA device {ordinal}"))?;
+                if candidate == device {
+                    device_id = Some(ordinal);
+                    break;
+                }
+            }
+            let device_id =
+                device_id.ok_or_else(|| anyhow::anyhow!("Device of the CUDA context not found"))?;
+
+            Self::load_module(context, device, device_id, false)
+        }
+    }
+
+    /// Read the compute capability and load the kernels into `context`
+    ///
+    /// # Safety
+    /// `context` must be a valid context. It is made current for the call, so
+    /// the caller's current context is restored afterwards.
+    unsafe fn load_module(
+        context: CUcontext,
+        device: CUdevice,
+        device_id: i32,
+        owns_context: bool,
+    ) -> Result<Self> {
+        unsafe {
+            let _guard = ContextGuard::push(context)?;
+
             // Get compute capability
             let mut compute_capability_major = 0;
             let mut compute_capability_minor = 0;
@@ -68,11 +143,6 @@ impl GpuContext {
                 CUdevice_attribute::CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
                 device,
             ))?;
-
-            // Create context
-            let mut context = ptr::null_mut();
-            check_cuda(cuCtxCreate_v2(&mut context, 0, device))
-                .context("Failed to create CUDA context")?;
 
             // Load PTX module
             // Try compile-time location first (from build script), fall back to runtime search
@@ -130,6 +200,7 @@ impl GpuContext {
 
             Ok(Self {
                 context,
+                owns_context,
                 module,
                 kernel,
                 kernel_transposed,
@@ -168,6 +239,13 @@ impl GpuContext {
     /// Get device ID
     pub fn device_id(&self) -> i32 {
         self.device_id
+    }
+
+    /// Make this generator's context current on the calling thread
+    ///
+    /// The previous current context is restored when the returned guard is dropped.
+    pub(crate) fn make_current(&self) -> Result<ContextGuard> {
+        unsafe { ContextGuard::push(self.context) }
     }
 
     /// Ensure persistent output buffer is allocated with at least the required size.
@@ -263,6 +341,7 @@ impl GpuContext {
         stream: CUstream,
         output_format: i32,
     ) -> Result<(CUdeviceptr, usize)> {
+        let _guard = self.make_current()?;
         unsafe {
             // Prepare charset data
             let mut charset_data = Vec::new();
@@ -458,6 +537,7 @@ impl GpuContext {
         batch_size: u64,
         output_format: i32,
     ) -> Result<(CUdeviceptr, usize)> {
+        let _guard = self.make_current()?;
         unsafe {
             // Prepare charset data
             let mut charset_data = Vec::new();
@@ -588,6 +668,7 @@ impl GpuContext {
         use_columnmajor: bool,
         output_format: i32,
     ) -> Result<Vec<u8>> {
+        let _guard = self.make_current()?;
         unsafe {
             // Prepare charset data
             let mut charset_data = Vec::new();
@@ -727,13 +808,50 @@ impl GpuContext {
 impl Drop for GpuContext {
     fn drop(&mut self) {
         unsafe {
-            // Free persistent output buffer if allocated
-            if let Some(ptr) = self.persistent_output_buffer {
-                let _ = cuMemFree_v2(ptr);
+            {
+                // Free module and buffers inside our own context
+                let _guard = ContextGuard::push(self.context).ok();
+
+                // Free persistent output buffer if allocated
+                if let Some(ptr) = self.persistent_output_buffer {
+                    let _ = cuMemFree_v2(ptr);
+                }
+
+                let _ = cuModuleUnload(self.module);
             }
 
-            let _ = cuModuleUnload(self.module);
-            let _ = cuCtxDestroy_v2(self.context);
+            // A context borrowed from the caller is never destroyed
+            if self.owns_context {
+                let _ = cuCtxDestroy_v2(self.context);
+            }
+        }
+    }
+}
+
+/// RAII guard that makes a context current and restores the previous one on drop
+pub(crate) struct ContextGuard {
+    _private: (),
+}
+
+impl ContextGuard {
+    /// Push `context` onto the calling thread's context stack
+    ///
+    /// # Safety
+    /// `context` must be a valid `CUcontext`.
+    unsafe fn push(context: CUcontext) -> Result<Self> {
+        unsafe {
+            check_cuda(cuCtxPushCurrent_v2(context))
+                .context("Failed to make CUDA context current")?;
+        }
+        Ok(Self { _private: () })
+    }
+}
+
+impl Drop for ContextGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let mut popped = ptr::null_mut();
+            let _ = cuCtxPopCurrent_v2(&mut popped);
         }
     }
 }

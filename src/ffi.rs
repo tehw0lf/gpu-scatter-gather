@@ -67,8 +67,6 @@ struct GeneratorInternal {
     charsets: HashMap<usize, Vec<u8>>,
     mask: Option<Vec<usize>>,
     current_batch: Option<CUdeviceptr>, // Track active device memory
-    #[allow(dead_code)]
-    owns_context: bool, // Whether we created the CUDA context (kept for future use)
     output_format: i32,                 // Output format mode (WG_FORMAT_*)
 }
 
@@ -84,6 +82,8 @@ impl GeneratorInternal {
     /// Free current device batch memory (if any)
     fn free_current_batch(&mut self) {
         if let Some(ptr) = self.current_batch.take() {
+            // The batch lives in the generator's context, which may not be current
+            let _guard = self.gpu.make_current().ok();
             unsafe {
                 let _ = cuMemFree_v2(ptr);
             }
@@ -120,37 +120,36 @@ unsafe fn handle_to_internal<'a>(gen: *mut WordlistGenerator) -> Option<&'a mut 
 /// Create a new wordlist generator
 ///
 /// # Arguments
-/// * `ctx` - CUDA context (NULL to create new, non-NULL to use existing)
-/// * `device_id` - CUDA device ID (0 for first GPU, ignored if ctx provided)
+/// * `ctx` - CUDA context (NULL to create a new one, non-NULL to use an existing one)
+/// * `device_id` - CUDA device ID (0 to `wg_get_device_count() - 1`); ignored if `ctx` is provided
+///
+/// With `ctx` NULL the generator creates and owns a context on `device_id`.
+/// An invalid `device_id` returns NULL and sets the error (see `wg_get_error`).
+/// The new context stays current on the calling thread.
+///
+/// With a non-NULL `ctx` the generator loads its kernels into that context and
+/// allocates its batches in it. `ctx` must be a valid `CUcontext` that outlives
+/// the generator. The caller's current context is restored after each call,
+/// and `wg_destroy` does not destroy `ctx`.
 ///
 /// # Returns
 /// Generator handle, or NULL on error
 #[no_mangle]
-pub extern "C" fn wg_create(
-    ctx: *mut std::ffi::c_void,
-    _device_id: i32, // TODO: Support device selection when ctx is NULL
-) -> *mut WordlistGenerator {
+pub extern "C" fn wg_create(ctx: *mut std::ffi::c_void, device_id: i32) -> *mut WordlistGenerator {
     // Catch any panics and return NULL
     let result = std::panic::catch_unwind(|| {
-        let (gpu, owns_context) = if ctx.is_null() {
-            // Create our own GPU context
-            match GpuContext::new() {
-                Ok(g) => (g, true),
-                Err(e) => {
-                    set_error(format!("Failed to create GPU context: {e}"));
-                    return std::ptr::null_mut();
-                }
-            }
+        let created = if ctx.is_null() {
+            // Create our own GPU context on the requested device
+            GpuContext::with_device(device_id)
         } else {
-            // Use provided CUDA context
-            // For now, we still create our own context
-            // TODO: Add GpuContext::from_existing(ctx) in future
-            match GpuContext::new() {
-                Ok(g) => (g, true),
-                Err(e) => {
-                    set_error(format!("Failed to create GPU context: {e}"));
-                    return std::ptr::null_mut();
-                }
+            // Use the context provided by the caller
+            unsafe { GpuContext::from_existing(ctx as CUcontext) }
+        };
+        let gpu = match created {
+            Ok(g) => g,
+            Err(e) => {
+                set_error(format!("Failed to create GPU context: {e}"));
+                return std::ptr::null_mut();
             }
         };
 
@@ -160,7 +159,6 @@ pub extern "C" fn wg_create(
             charsets: HashMap::new(),
             mask: None,
             current_batch: None,
-            owns_context,
             output_format: WG_FORMAT_NEWLINES, // Default format
         });
 
@@ -1304,5 +1302,242 @@ mod tests {
         assert!(!ptr.is_null());
         let version = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
         assert_eq!(version, env!("CARGO_PKG_VERSION"));
+    }
+
+    // GPU tests below need a CUDA device; each skips when there is none.
+
+    fn last_error() -> String {
+        LAST_ERROR.with(|e| e.borrow().clone().unwrap_or_default())
+    }
+
+    fn new_caller_context() -> CUcontext {
+        unsafe {
+            assert_eq!(cuInit(0), CUresult::CUDA_SUCCESS);
+            let mut dev = 0;
+            assert_eq!(cuDeviceGet(&mut dev, 0), CUresult::CUDA_SUCCESS);
+            let mut ctx = std::ptr::null_mut();
+            assert_eq!(cuCtxCreate_v2(&mut ctx, 0, dev), CUresult::CUDA_SUCCESS);
+            ctx
+        }
+    }
+
+    fn current_context() -> CUcontext {
+        let mut cur = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(cuCtxGetCurrent(&mut cur), CUresult::CUDA_SUCCESS);
+        }
+        cur
+    }
+
+    /// Configure charset 1 = "abc" and mask [1, 1]: the first words are aa, ab, ac, ba, ...
+    fn configure(gen: *mut WordlistGenerator) {
+        let chars = b"abc";
+        assert_eq!(
+            wg_set_charset(gen, 1, chars.as_ptr() as *const c_char, chars.len()),
+            WG_SUCCESS
+        );
+        let mask = [1i32, 1i32];
+        assert_eq!(wg_set_mask(gen, mask.as_ptr(), 2), WG_SUCCESS);
+    }
+
+    const EXPECTED_WORDS: &[u8] = b"aa\nab\nac\nba\nbb\nbc\nca\ncb\ncc\n";
+
+    #[test]
+    fn wg_create_rejects_invalid_device_id() {
+        if wg_get_device_count() == 0 {
+            eprintln!("skipped: no CUDA device");
+            return;
+        }
+        for id in [wg_get_device_count(), -1] {
+            let gen = wg_create(std::ptr::null_mut(), id);
+            assert!(gen.is_null(), "device_id {id} must be rejected");
+            assert!(last_error().contains("Invalid device_id"));
+        }
+    }
+
+    #[test]
+    fn wg_create_with_context_allocates_in_that_context_and_keeps_it_current() {
+        if wg_get_device_count() == 0 {
+            eprintln!("skipped: no CUDA device");
+            return;
+        }
+        let ctx = new_caller_context();
+        let gen = wg_create(ctx as *mut std::ffi::c_void, 0);
+        assert!(!gen.is_null(), "{}", last_error());
+        assert_eq!(current_context(), ctx);
+
+        configure(gen);
+        let mut batch = BatchDevice {
+            data: 0,
+            count: 0,
+            word_length: 0,
+            stride: 0,
+            total_bytes: 0,
+            format: 0,
+        };
+        assert_eq!(wg_generate_batch_device(gen, 0, 9, &mut batch), WG_SUCCESS);
+        assert_eq!(current_context(), ctx);
+
+        unsafe {
+            let mut owner: CUcontext = std::ptr::null_mut();
+            assert_eq!(
+                cuPointerGetAttribute(
+                    &mut owner as *mut CUcontext as *mut std::ffi::c_void,
+                    CUpointer_attribute::CU_POINTER_ATTRIBUTE_CONTEXT,
+                    batch.data,
+                ),
+                CUresult::CUDA_SUCCESS
+            );
+            assert_eq!(owner, ctx);
+
+            let mut host = vec![0u8; batch.total_bytes];
+            assert_eq!(
+                cuMemcpyDtoH_v2(host.as_mut_ptr() as *mut _, batch.data, batch.total_bytes),
+                CUresult::CUDA_SUCCESS
+            );
+            assert_eq!(host, EXPECTED_WORDS);
+        }
+
+        wg_destroy(gen);
+        assert_eq!(current_context(), ctx);
+
+        // The library must not have destroyed the caller's context
+        unsafe {
+            assert_eq!(cuCtxSynchronize(), CUresult::CUDA_SUCCESS);
+            assert_eq!(cuCtxDestroy_v2(ctx), CUresult::CUDA_SUCCESS);
+        }
+    }
+
+    #[test]
+    fn wg_create_without_context_works_while_another_context_is_current() {
+        if wg_get_device_count() == 0 {
+            eprintln!("skipped: no CUDA device");
+            return;
+        }
+        let gen = wg_create(std::ptr::null_mut(), 0);
+        assert!(!gen.is_null(), "{}", last_error());
+        configure(gen);
+
+        let caller = new_caller_context();
+        assert_eq!(current_context(), caller);
+
+        let mut buf = vec![0u8; EXPECTED_WORDS.len()];
+        let n = wg_generate_batch_host(gen, 0, 9, buf.as_mut_ptr(), buf.len());
+        assert_eq!(n, EXPECTED_WORDS.len() as isize);
+        assert_eq!(buf, EXPECTED_WORDS);
+        assert_eq!(current_context(), caller);
+
+        wg_destroy(gen);
+        assert_eq!(current_context(), caller);
+        unsafe {
+            assert_eq!(cuCtxDestroy_v2(caller), CUresult::CUDA_SUCCESS);
+        }
+    }
+
+    fn empty_batch() -> BatchDevice {
+        BatchDevice {
+            data: 0,
+            count: 0,
+            word_length: 0,
+            stride: 0,
+            total_bytes: 0,
+            format: 0,
+        }
+    }
+
+    fn pointer_context(ptr: u64) -> CUcontext {
+        let mut owner: CUcontext = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                cuPointerGetAttribute(
+                    &mut owner as *mut CUcontext as *mut std::ffi::c_void,
+                    CUpointer_attribute::CU_POINTER_ATTRIBUTE_CONTEXT,
+                    ptr,
+                ),
+                CUresult::CUDA_SUCCESS
+            );
+        }
+        owner
+    }
+
+    fn read_device(batch: &BatchDevice) -> Vec<u8> {
+        let mut host = vec![0u8; batch.total_bytes];
+        unsafe {
+            assert_eq!(
+                cuMemcpyDtoH_v2(host.as_mut_ptr() as *mut _, batch.data, batch.total_bytes),
+                CUresult::CUDA_SUCCESS
+            );
+        }
+        host
+    }
+
+    #[test]
+    fn device_and_stream_batches_use_the_generator_context_while_another_is_current() {
+        if wg_get_device_count() == 0 {
+            eprintln!("skipped: no CUDA device");
+            return;
+        }
+        // Generator on a caller context
+        let ctx = new_caller_context();
+        let gen = wg_create(ctx as *mut std::ffi::c_void, 0);
+        assert!(!gen.is_null(), "{}", last_error());
+        configure(gen);
+        let mut stream: CUstream = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(cuStreamCreate(&mut stream, 0), CUresult::CUDA_SUCCESS);
+        }
+
+        // Generator on its own context
+        let own = wg_create(std::ptr::null_mut(), 0);
+        assert!(!own.is_null(), "{}", last_error());
+        configure(own);
+
+        // A third context is current while the generators run
+        let other = new_caller_context();
+        assert_eq!(current_context(), other);
+
+        let mut batch = empty_batch();
+        assert_eq!(wg_generate_batch_device(gen, 0, 9, &mut batch), WG_SUCCESS);
+        assert_eq!(current_context(), other);
+        assert_eq!(pointer_context(batch.data), ctx);
+        unsafe {
+            assert_eq!(cuCtxPushCurrent_v2(ctx), CUresult::CUDA_SUCCESS);
+        }
+        assert_eq!(read_device(&batch), EXPECTED_WORDS);
+        unsafe {
+            let mut popped = std::ptr::null_mut();
+            assert_eq!(cuCtxPopCurrent_v2(&mut popped), CUresult::CUDA_SUCCESS);
+        }
+
+        let mut batch = empty_batch();
+        assert_eq!(
+            wg_generate_batch_stream(gen, stream, 0, 9, &mut batch),
+            WG_SUCCESS
+        );
+        assert_eq!(current_context(), other);
+        assert_eq!(pointer_context(batch.data), ctx);
+        unsafe {
+            assert_eq!(cuCtxPushCurrent_v2(ctx), CUresult::CUDA_SUCCESS);
+            assert_eq!(cuStreamSynchronize(stream), CUresult::CUDA_SUCCESS);
+        }
+        assert_eq!(read_device(&batch), EXPECTED_WORDS);
+        unsafe {
+            let mut popped = std::ptr::null_mut();
+            assert_eq!(cuCtxPopCurrent_v2(&mut popped), CUresult::CUDA_SUCCESS);
+        }
+
+        // The generator with its own context also works from another current context
+        let mut batch = empty_batch();
+        assert_eq!(wg_generate_batch_device(own, 0, 9, &mut batch), WG_SUCCESS);
+        assert_eq!(current_context(), other);
+        assert_ne!(pointer_context(batch.data), other);
+
+        wg_destroy(own);
+        wg_destroy(gen);
+        assert_eq!(current_context(), other);
+        unsafe {
+            assert_eq!(cuCtxDestroy_v2(other), CUresult::CUDA_SUCCESS);
+            assert_eq!(cuCtxDestroy_v2(ctx), CUresult::CUDA_SUCCESS);
+        }
     }
 }

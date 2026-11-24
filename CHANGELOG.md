@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.8] - 2026-11-24
+
+### Fixed
+- `wg_create(NULL, device_id)` creates its context on `device_id` and returns NULL with an error for an invalid id (it ignored the argument and always used device 0)
+- `wg_create(ctx, ...)` with a non-NULL `ctx` loads the kernels into that context and allocates batches in it, restores the caller's current context after each call and never destroys `ctx` (it created its own context and ignored `ctx`); `device_id` is ignored in that case
+- New `GpuContext::from_existing` (unsafe) for a context owned by the caller
+
 ## [1.8.7] - 2026-11-23
 
 ### Fixed

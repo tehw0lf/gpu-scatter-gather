@@ -63,7 +63,7 @@ cargo test
 
 # Run C FFI tests
 gcc -o test_ffi tests/ffi_basic_test.c -I. -I/opt/cuda/targets/x86_64-linux/include \
-    -L./target/release -lgpu_scatter_gather -Wl,-rpath,./target/release
+    -L./target/release -lgpu_scatter_gather -lcuda -Wl,-rpath,./target/release
 ./test_ffi
 
 # Benchmarks

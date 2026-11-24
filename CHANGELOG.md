@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.9] - 2026-11-24
+
+### Fixed
+- The C FFI test build command in `CLAUDE.md` links `-lcuda`, which `tests/ffi_basic_test.c` needs for its direct CUDA driver calls
+
 ## [1.8.8] - 2026-11-24
 
 ### Fixed

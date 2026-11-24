@@ -6,6 +6,17 @@
 
 ---
 
+> **Illustrative code, not the shipped API.** The C snippets in this guide sketch an integration against a simplified interface. They do not compile against `include/wordlist_generator.h` as written. The differences that matter:
+>
+> | In this guide | In the shipped API |
+> |---|---|
+> | `wg_handle_t` | `struct wg_WordlistGenerator *` |
+> | `wg_batch_device_t` | `struct wg_BatchDevice` |
+> | `WG_FORMAT_*` | `wg_WG_FORMAT_*` in the generated header |
+> | `wg_create(ctx, device_id)` | a non-NULL `ctx` is used (kernels and batches live in it, `wg_destroy` does not destroy it) and `device_id` is ignored in that case; a NULL `ctx` creates a context on `device_id` |
+>
+> The specification in [`docs/api/C_API_SPECIFICATION.md`](../api/C_API_SPECIFICATION.md) and the example `tests/ffi_integration_simple.c` describe the actual interface.
+
 ## Overview
 
 This guide explains how to integrate `libwordlist_generator` into GPU-based password crackers like hashcat, John the Ripper, or custom security tools.

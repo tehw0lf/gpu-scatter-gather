@@ -234,6 +234,7 @@ CUDA error: invalid resource handle
 2. **Multi-GPU API** (Optional):
    - Add `wg_create_on_device(int device_id)`
    - Explicit device selection
+   - Later shipped as `wg_multigpu_create_with_devices`
    - Currently: Multiple processes is simpler and works
 
 3. **Additional Integration Tests**:

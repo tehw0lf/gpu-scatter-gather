@@ -259,7 +259,7 @@ All 13 tests passing:
 ### Pattern 1: Maximum Throughput (All GPUs)
 
 ```c
-wg_multigpu_handle_t gen = wg_multigpu_create();
+struct wg_MultiGpuGenerator *gen = wg_multigpu_create();
 // Uses all available GPUs automatically
 ```
 
@@ -273,7 +273,7 @@ wg_multigpu_handle_t gen = wg_multigpu_create();
 ```c
 // Skip integrated GPU, use only discrete GPUs
 int devices[] = {1, 2, 3};  // GPUs 1-3
-wg_multigpu_handle_t gen = wg_multigpu_create_with_devices(devices, 3);
+struct wg_MultiGpuGenerator *gen = wg_multigpu_create_with_devices(devices, 3);
 ```
 
 **Use when:**
@@ -285,7 +285,7 @@ wg_multigpu_handle_t gen = wg_multigpu_create_with_devices(devices, 3);
 
 ```c
 // Use single-GPU API for small batches
-wg_handle_t gen = wg_create(NULL, 0);
+struct wg_WordlistGenerator *gen = wg_create(NULL, 0);
 wg_generate_batch_host(gen, 0, 1000000, buffer, buffer_size);
 ```
 
@@ -354,8 +354,8 @@ wg_generate_batch_host(gen, 0, 1000000, buffer, buffer_size);
 ```c
 // Partition manually based on GPU performance
 // Use single-GPU API with manual distribution
-wg_handle_t gen0 = wg_create(NULL, 0);  // Fast GPU
-wg_handle_t gen1 = wg_create(NULL, 1);  // Slow GPU
+struct wg_WordlistGenerator *gen0 = wg_create(NULL, 0);  // Fast GPU
+struct wg_WordlistGenerator *gen1 = wg_create(NULL, 1);  // Slow GPU
 
 // Give 70% to fast GPU, 30% to slow GPU
 wg_generate_batch_host(gen0, 0, 70000000, buf0, size0);

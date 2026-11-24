@@ -192,7 +192,7 @@ cargo run --release --example simple_rust_api
 
 int main() {
     // Create multi-GPU generator (uses all GPUs automatically)
-    wg_multigpu_handle_t gen = wg_multigpu_create();
+    struct wg_MultiGpuGenerator *gen = wg_multigpu_create();
     printf("Using %d GPU(s)\n", wg_multigpu_get_device_count(gen));
 
     // Configure charsets

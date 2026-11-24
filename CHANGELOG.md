@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.10] - 2026-11-25
+
+### Changed
+- `docs/WHITEPAPER.md`, `docs/design/MULTI_GPU_DESIGN.md` and `docs/guides/INTEGRATION_GUIDE.md` carry a note that their C interface is a sketch or a pre-implementation design and not the shipped header; `docs/testing/INTEGRATION_TEST_REPORT.md` notes that explicit device selection shipped as `wg_multigpu_create_with_devices`
+- `README.md`, `docs/api/FFI_IMPLEMENTATION_GUIDE.md` and `docs/benchmarking/MULTI_GPU_RESULTS.md` use the handle types of the generated header instead of `wg_handle_t` and `wg_multigpu_handle_t`
+
 ## [1.8.9] - 2026-11-24
 
 ### Fixed

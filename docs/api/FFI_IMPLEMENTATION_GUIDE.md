@@ -579,7 +579,7 @@ mod tests {
 
 void test_basic_usage() {
     // Create
-    wg_handle_t gen = wg_create(NULL, 0);
+    struct wg_WordlistGenerator *gen = wg_create(NULL, 0);
     assert(gen != NULL);
 
     // Configure
@@ -600,7 +600,7 @@ void test_basic_usage() {
 }
 
 void test_error_handling() {
-    wg_handle_t gen = wg_create(NULL, 0);
+    struct wg_WordlistGenerator *gen = wg_create(NULL, 0);
 
     // Invalid charset ID
     int result = wg_set_charset(gen, 0, "abc", 3);

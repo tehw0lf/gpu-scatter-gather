@@ -6,6 +6,18 @@
 
 ---
 
+> **Pre-implementation design, not the shipped API.** The multi-GPU API that shipped is the `wg_multigpu_*` functions in `include/wordlist_generator.h`, described in [`docs/api/C_API_SPECIFICATION.md`](../api/C_API_SPECIFICATION.md). The design text below is unchanged; the differences that matter:
+>
+> | In this design | In the shipped API |
+> |---|---|
+> | `wg_multigpu_create` and `wg_multigpu_create_with_devices` take charsets and a string mask | `wg_multigpu_create(void)` and `wg_multigpu_create_with_devices(device_ids, ...)` take no charsets or mask; configuration goes through `wg_multigpu_set_charset`, `wg_multigpu_set_mask` and `wg_multigpu_set_format` |
+> | `wg_multigpu_generate` returns an allocated buffer | `wg_multigpu_generate` writes into a caller buffer and returns the number of bytes written, or a negative error code |
+> | `wg_multigpu_get_stats`, `WG_MultiGpuStats` | not implemented |
+> | no device count function | `wg_multigpu_get_device_count` |
+> | `wg_generate`, `wg_free_output`, `WG_Generator` | not implemented; `wg_generate_batch_host` writes single-GPU host output into a caller buffer |
+> | `WG_MultiGpuGenerator` | `struct wg_MultiGpuGenerator` |
+
+
 ## Table of Contents
 
 - [Overview](#overview)

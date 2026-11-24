@@ -1433,4 +1433,111 @@ mod tests {
             assert_eq!(cuCtxDestroy_v2(caller), CUresult::CUDA_SUCCESS);
         }
     }
+
+    fn empty_batch() -> BatchDevice {
+        BatchDevice {
+            data: 0,
+            count: 0,
+            word_length: 0,
+            stride: 0,
+            total_bytes: 0,
+            format: 0,
+        }
+    }
+
+    fn pointer_context(ptr: u64) -> CUcontext {
+        let mut owner: CUcontext = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                cuPointerGetAttribute(
+                    &mut owner as *mut CUcontext as *mut std::ffi::c_void,
+                    CUpointer_attribute::CU_POINTER_ATTRIBUTE_CONTEXT,
+                    ptr,
+                ),
+                CUresult::CUDA_SUCCESS
+            );
+        }
+        owner
+    }
+
+    fn read_device(batch: &BatchDevice) -> Vec<u8> {
+        let mut host = vec![0u8; batch.total_bytes];
+        unsafe {
+            assert_eq!(
+                cuMemcpyDtoH_v2(host.as_mut_ptr() as *mut _, batch.data, batch.total_bytes),
+                CUresult::CUDA_SUCCESS
+            );
+        }
+        host
+    }
+
+    #[test]
+    fn device_and_stream_batches_use_the_generator_context_while_another_is_current() {
+        if wg_get_device_count() == 0 {
+            eprintln!("skipped: no CUDA device");
+            return;
+        }
+        // Generator on a caller context
+        let ctx = new_caller_context();
+        let gen = wg_create(ctx as *mut std::ffi::c_void, 0);
+        assert!(!gen.is_null(), "{}", last_error());
+        configure(gen);
+        let mut stream: CUstream = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(cuStreamCreate(&mut stream, 0), CUresult::CUDA_SUCCESS);
+        }
+
+        // Generator on its own context
+        let own = wg_create(std::ptr::null_mut(), 0);
+        assert!(!own.is_null(), "{}", last_error());
+        configure(own);
+
+        // A third context is current while the generators run
+        let other = new_caller_context();
+        assert_eq!(current_context(), other);
+
+        let mut batch = empty_batch();
+        assert_eq!(wg_generate_batch_device(gen, 0, 9, &mut batch), WG_SUCCESS);
+        assert_eq!(current_context(), other);
+        assert_eq!(pointer_context(batch.data), ctx);
+        unsafe {
+            assert_eq!(cuCtxPushCurrent_v2(ctx), CUresult::CUDA_SUCCESS);
+        }
+        assert_eq!(read_device(&batch), EXPECTED_WORDS);
+        unsafe {
+            let mut popped = std::ptr::null_mut();
+            assert_eq!(cuCtxPopCurrent_v2(&mut popped), CUresult::CUDA_SUCCESS);
+        }
+
+        let mut batch = empty_batch();
+        assert_eq!(
+            wg_generate_batch_stream(gen, stream, 0, 9, &mut batch),
+            WG_SUCCESS
+        );
+        assert_eq!(current_context(), other);
+        assert_eq!(pointer_context(batch.data), ctx);
+        unsafe {
+            assert_eq!(cuCtxPushCurrent_v2(ctx), CUresult::CUDA_SUCCESS);
+            assert_eq!(cuStreamSynchronize(stream), CUresult::CUDA_SUCCESS);
+        }
+        assert_eq!(read_device(&batch), EXPECTED_WORDS);
+        unsafe {
+            let mut popped = std::ptr::null_mut();
+            assert_eq!(cuCtxPopCurrent_v2(&mut popped), CUresult::CUDA_SUCCESS);
+        }
+
+        // The generator with its own context also works from another current context
+        let mut batch = empty_batch();
+        assert_eq!(wg_generate_batch_device(own, 0, 9, &mut batch), WG_SUCCESS);
+        assert_eq!(current_context(), other);
+        assert_ne!(pointer_context(batch.data), other);
+
+        wg_destroy(own);
+        wg_destroy(gen);
+        assert_eq!(current_context(), other);
+        unsafe {
+            assert_eq!(cuCtxDestroy_v2(other), CUresult::CUDA_SUCCESS);
+            assert_eq!(cuCtxDestroy_v2(ctx), CUresult::CUDA_SUCCESS);
+        }
+    }
 }
